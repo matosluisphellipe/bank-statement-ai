@@ -197,9 +197,11 @@ if page == "Resumo":
                 render_metrics(summary)
 
                 st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
-                if st.button("📄 Ver detalhes do extrato", type="primary"):
-                    st.session_state.page = "Detalhes"
-                    st.experimental_rerun()
+                st.button(
+                    "📄 Ver detalhes do extrato",
+                    type="primary",
+                    on_click=lambda: st.session_state.update(page="Detalhes"),
+                )
 
         except Exception as exc:  # noqa: BLE001
             st.error(f"❌ Erro ao processar o arquivo: {exc}")
