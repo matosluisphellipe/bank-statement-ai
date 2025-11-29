@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import pdfplumber
-import ofxparse
 import io
 import re
 
@@ -35,6 +34,44 @@ def parse_txt(text):
     return pd.DataFrame(rows)
 
 ###########################################
+# 🔹 OFX / QFX / QBO (Manual Parser)
+###########################################
+def parse_ofx_text(text):
+    rows = []
+
+    # Extract each transaction block <STMTTRN> ... </STMTTRN>
+    blocks = re.findall(r"<STMTTRN>(.*?)</STMTTRN>", text, flags=re.DOTALL)
+
+    for block in blocks:
+        date_match = re.search(r"<DTPOSTED>(.*?)<", block)
+        memo_match = re.search(r"<MEMO>(.*?)<", block)
+        amount_match = re.search(r"<TRNAMT>(.*?)<", block)
+
+        if amount_match:
+            amount = float(amount_match.group(1))
+        else:
+            amount = None
+
+        if date_match:
+            raw_date = date_match.group(1)
+            # Formats like: 20241005, 20241005120000[-5:EST]
+            clean_date = re.sub(r"[^0-9]", "", raw_date)[:8]
+            date_fmt = f"{clean_date[4:6]}/{clean_date[6:8]}/{clean_date[:4]}"
+        else:
+            date_fmt = None
+
+        memo = memo_match.group(1) if memo_match else None
+
+        rows.append({
+            "Date": date_fmt,
+            "Description": memo,
+            "Amount": amount,
+            "Balance": None
+        })
+
+    return pd.DataFrame(rows)
+
+###########################################
 # 🔹 CSV / XLSX PARSER
 ###########################################
 def parse_excel_csv(file):
@@ -45,7 +82,7 @@ def parse_excel_csv(file):
         return pd.read_excel(file)
 
 ###########################################
-# 🔹 PDF PARSER (TEXT ONLY)
+# 🔹 PDF PARSER (TEXT-ONLY)
 ###########################################
 def parse_pdf_text(file):
     rows = []
@@ -63,22 +100,7 @@ def parse_pdf_text(file):
     return pd.DataFrame()
 
 ###########################################
-# 🔹 OFX/QFX/QBO PARSER
-###########################################
-def parse_ofx(file):
-    data = ofxparse.OfxParser.parse(file)
-    rows = []
-    for tx in data.account.statement.transactions:
-        rows.append({
-            "Date": tx.date.strftime("%Y-%m-%d"),
-            "Description": tx.memo,
-            "Amount": tx.amount,
-            "Balance": None,
-        })
-    return pd.DataFrame(rows)
-
-###########################################
-# 🔹 MASTER PARSER (AUTO)
+# 🔹 MASTER PARSER
 ###########################################
 def parse_file(uploaded):
     name = uploaded.name.lower()
@@ -94,7 +116,8 @@ def parse_file(uploaded):
         return parse_pdf_text(uploaded)
 
     if name.endswith((".ofx", ".qfx", ".qbo")):
-        return parse_ofx(uploaded)
+        text = uploaded.read().decode("utf-8", errors="ignore")
+        return parse_ofx_text(text)
 
     raise ValueError("Unsupported format")
 
