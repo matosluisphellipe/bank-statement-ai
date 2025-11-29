@@ -157,16 +157,6 @@ if "page" not in st.session_state:
     st.session_state.page = "main"
 
 
-def go_to_details():
-    st.session_state.page = "details"
-    st.rerun()
-
-
-def go_to_main():
-    st.session_state.page = "main"
-    st.rerun()
-
-
 page = st.session_state.page
 
 
@@ -179,13 +169,12 @@ if page == "main":
         "Envie seu extrato e visualize um resumo claro e profissional.",
     )
 
-    with st.container():
-        st.subheader("Upload do extrato")
-        uploaded = st.file_uploader(
-            "Envie arquivos PDF, CSV, XLSX, TXT, OFX, QFX ou QBO",
-            type=["pdf", "csv", "xlsx", "txt", "ofx", "qfx", "qbo"],
-            help="Aceitamos arquivos comuns de extratos bancários.",
-        )
+    st.subheader("Upload do extrato")
+    uploaded = st.file_uploader(
+        "Envie arquivos PDF, CSV, XLSX, TXT, OFX, QFX ou QBO",
+        type=["pdf", "csv", "xlsx", "txt", "ofx", "qfx", "qbo"],
+        help="Aceitamos arquivos comuns de extratos bancários.",
+    )
 
     if uploaded:
         try:
@@ -197,13 +186,10 @@ if page == "main":
                 st.session_state.transactions = df
                 summary = calculate_summary(df)
 
-                st.success("✅ Arquivo processado com sucesso!")
-                st.markdown("---")
-                st.subheader("Resumo do extrato")
                 render_metrics(summary)
 
-                st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
-                st.button("📄 Ver detalhes do extrato", type="primary", on_click=go_to_details)
+                if st.button("📄 Ver detalhes do extrato", type="primary"):
+                    st.session_state.page = "details"
 
         except Exception as exc:  # noqa: BLE001
             st.error(f"❌ Erro ao processar o arquivo: {exc}")
@@ -223,18 +209,40 @@ if page == "details":
     df = st.session_state.get("transactions")
     if df is None or df.empty:
         st.info("Nenhum extrato carregado ainda. Volte para a página de Resumo e envie um arquivo.")
-        st.button("⬅️ Voltar", on_click=go_to_main)
+        if st.button("⬅️ Voltar"):
+            st.session_state.page = "main"
     else:
         df = normalize_transactions(df)
         st.subheader("Filtros")
-        search = st.text_input("Filtrar por descrição", placeholder="Digite parte da descrição")
+        col1, col2 = st.columns(2)
+        with col1:
+            search = st.text_input(
+                "Filtrar por descrição",
+                placeholder="Digite parte da descrição",
+            )
+        with col2:
+            value_query = st.text_input(
+                "Filtrar por valor",
+                placeholder="Ex.: 100.50",
+            )
 
         filtered = df.copy()
         if search:
             filtered = filtered[filtered["Description"].str.contains(search, case=False, na=False)]
 
+        if value_query:
+            value_str = value_query.replace(",", ".")
+            try:
+                value = float(value_str)
+            except ValueError:
+                st.warning("Valor inválido. Use apenas números, ponto ou vírgula.")
+            else:
+                filtered = filtered[filtered["Amount"] == value]
+
         st.markdown("---")
         st.subheader("Tabela completa")
         st.dataframe(filtered, use_container_width=True)
-        st.button("⬅️ Voltar", on_click=go_to_main)
+
+        if st.button("⬅️ Voltar"):
+            st.session_state.page = "main"
 
