@@ -4,8 +4,11 @@ import pdfplumber
 import io
 import re
 
-st.set_page_config(page_title="TESTES", layout="wide")
-st.title("TESTES")
+st.set_page_config(
+    page_title="Bank Statement Parser & Viewer",
+    layout="wide",
+)
+st.title("Bank Statement Parser & Viewer")
 
 uploaded = st.file_uploader(
     "Upload your bank statement",
