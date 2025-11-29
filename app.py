@@ -5,7 +5,7 @@ import io
 import re
 
 st.set_page_config(page_title="Bank Statement Classifier – AI", layout="wide")
-st.title("🏦 Bank Statement Classifier – Universal AI Parser")
+st.title("🏦 Bank Statement Classifier – Bookkepper")
 
 uploaded = st.file_uploader(
     "Upload your bank statement",
