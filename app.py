@@ -1,87 +1,60 @@
 import streamlit as st
 import pandas as pd
-import pdfplumber
-import io
+import re
 
-st.set_page_config(
-    page_title="Bank Statement Classifier – AI",
-    layout="wide"
-)
+st.set_page_config(page_title="Bank Statement Classifier – AI", layout="wide")
 
-# -------------------------------------------------------
-# FUNÇÃO PARA PROCESSAR ARQUIVOS
-# -------------------------------------------------------
+st.title("🏦 Bank Statement Classifier – AI")
+st.write("Upload your bank statement in **TXT**, **PDF**, **CSV**, or **XLSX** format.")
 
-def process_file(uploaded_file):
-    filename = uploaded_file.name.lower()
+uploaded_file = st.file_uploader("Upload your file", type=["txt", "csv", "xlsx", "pdf"])
 
-    # ----------------------
-    # Caso seja PDF
-    # ----------------------
-    if filename.endswith(".pdf"):
-        text_data = []
-        with pdfplumber.open(uploaded_file) as pdf:
-            for page in pdf.pages:
-                text_data.append(page.extract_text())
+def parse_txt_statement(text):
+    """
+    Extrai transações do arquivo TXT exatamente no formato do seu extrato.
+    """
+    lines = text.splitlines()
 
-        # transforma cada linha em uma "linha de tabela"
-        df = pd.DataFrame({"Description": text_data})
-        return df
+    data = []
+    pattern = re.compile(r"^(\d{2}/\d{2}/\d{4})\s+(.+?)\s+(-?\d{1,3}(?:,\d{3})*\.\d{2})\s+(-?\d{1,3}(?:,\d{3})*\.\d{2})$")
 
-    # ----------------------
-    # Caso seja XLSX
-    # ----------------------
-    if filename.endswith(".xlsx"):
-        return pd.read_excel(uploaded_file)
+    for line in lines:
+        match = pattern.search(line.strip())
+        if match:
+            date, description, amount, balance = match.groups()
+            data.append({
+                "Date": date,
+                "Description": description.strip(),
+                "Amount": float(amount.replace(",", "")),
+                "Balance After": float(balance.replace(",", "")),
+            })
 
-    # ----------------------
-    # Caso seja CSV
-    # Leitura robusta (NÃO quebra com tokenizing error!)
-    # ----------------------
-    if filename.endswith(".csv"):
-        try:
-            df = pd.read_csv(uploaded_file, engine="python", sep=None)  # detecta delimitador
-        except:
-            try:
-                df = pd.read_csv(uploaded_file, engine="python", sep=",", on_bad_lines="skip")
-            except:
-                df = pd.read_csv(
-                    uploaded_file,
-                    engine="python",
-                    sep=",",
-                    header=None,
-                    names=["col1", "col2", "col3", "col4"],
-                    on_bad_lines="skip"
-                )
-
-        df = df.dropna(axis=1, how="all")  # remove colunas vazias
-        df = df.dropna(how="all")          # remove linhas vazias
-        return df
-
-    return None
+    return pd.DataFrame(data)
 
 
-# -------------------------------------------------------
-# INTERFACE
-# -------------------------------------------------------
+if uploaded_file is not None:
+    file_type = uploaded_file.name.lower()
 
-st.title("📊 Bank Statement Classifier – AI")
-st.write("Upload your bank statement in **PDF**, **CSV**, or **XLSX** format.")
-
-uploaded_file = st.file_uploader(
-    "Upload your file",
-    type=["pdf", "csv", "xlsx"]
-)
-
-if uploaded_file:
     try:
-        df = process_file(uploaded_file)
-        st.success("File processed successfully!")
+        if file_type.endswith(".txt"):
+            text = uploaded_file.read().decode("utf-8", errors="ignore")
+            df = parse_txt_statement(text)
 
-        st.dataframe(df, use_container_width=True)
+        elif file_type.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+
+        elif file_type.endswith(".xlsx"):
+            df = pd.read_excel(uploaded_file)
+
+        else:
+            st.error("PDF ainda não está habilitado nesta versão.")
+            st.stop()
+
+        if df.empty:
+            st.warning("⚠️ The file was processed, but no transactions were found.")
+        else:
+            st.success("✅ File processed successfully!")
+            st.dataframe(df, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Error processing file: {str(e)}")
-
-else:
-    st.info("Please upload a file to begin.")
+        st.error(f"Error: {str(e)}")
