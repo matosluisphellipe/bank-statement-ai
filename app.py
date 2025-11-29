@@ -1,10 +1,8 @@
 import streamlit as st
 import pandas as pd
 import pdfplumber
-import pytesseract
-from PIL import Image
-import io
 import ofxparse
+import io
 import re
 
 st.set_page_config(page_title="Bank Statement Classifier – AI", layout="wide")
@@ -43,10 +41,11 @@ def parse_excel_csv(file):
     try:
         return pd.read_csv(file)
     except:
+        file.seek(0)
         return pd.read_excel(file)
 
 ###########################################
-# 🔹 PDF PARSER (TEXTO)
+# 🔹 PDF PARSER (TEXT ONLY)
 ###########################################
 def parse_pdf_text(file):
     rows = []
@@ -55,27 +54,10 @@ def parse_pdf_text(file):
             text = page.extract_text()
             if not text:
                 continue
-            lines = text.splitlines()
-            txt = "\n".join(lines)
-            df = parse_txt(txt)  # reusa o parser de texto
-            rows.append(df)
-
-    if rows:
-        return pd.concat(rows, ignore_index=True)
-    return pd.DataFrame()
-
-###########################################
-# 🔹 PDF PARSER (OCR – IMAGEM)
-###########################################
-def parse_pdf_ocr(file):
-    rows = []
-    with pdfplumber.open(file) as pdf:
-        for page in pdf.pages:
-            img = page.to_image()
-            pil = Image.open(io.BytesIO(img.original))
-            text = pytesseract.image_to_string(pil)
             df = parse_txt(text)
-            rows.append(df)
+            if not df.empty:
+                rows.append(df)
+
     if rows:
         return pd.concat(rows, ignore_index=True)
     return pd.DataFrame()
@@ -96,7 +78,7 @@ def parse_ofx(file):
     return pd.DataFrame(rows)
 
 ###########################################
-# 🔹 MASTER PARSER (AUTOMÁTICO)
+# 🔹 MASTER PARSER (AUTO)
 ###########################################
 def parse_file(uploaded):
     name = uploaded.name.lower()
@@ -109,17 +91,12 @@ def parse_file(uploaded):
         return parse_excel_csv(uploaded)
 
     if name.endswith(".pdf"):
-        df = parse_pdf_text(uploaded)
-        if df.empty:
-            uploaded.seek(0)
-            df = parse_pdf_ocr(uploaded)
-        return df
+        return parse_pdf_text(uploaded)
 
     if name.endswith((".ofx", ".qfx", ".qbo")):
         return parse_ofx(uploaded)
 
     raise ValueError("Unsupported format")
-
 
 ###########################################
 # 🔹 PROCESSAMENTO
