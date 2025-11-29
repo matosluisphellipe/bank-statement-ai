@@ -1,48 +1,44 @@
-import streamlit as st
-import pandas as pd
-import pdfplumber
 import io
 import re
+
+import pandas as pd
+import pdfplumber
+import streamlit as st
+
 
 st.set_page_config(
     page_title="Bank Statement Parser & Viewer",
     layout="wide",
-)
-st.title("Bank Statement Parser & Viewer")
-
-uploaded = st.file_uploader(
-    "Upload your bank statement",
-    type=["txt", "csv", "xlsx", "pdf", "ofx", "qfx", "qbo"]
+    initial_sidebar_state="expanded",
 )
 
-###########################################
-# 🔹 TXT PARSER
-###########################################
-def parse_txt(text):
+
+# ------------------------------------------------------------
+# Parsing utilities
+# ------------------------------------------------------------
+def parse_txt(text: str) -> pd.DataFrame:
     pattern = re.compile(
         r"^(\d{2}/\d{2}/\d{4})\s+(.+?)\s+(-?\d{1,3}(?:,\d{3})*\.\d{2})\s+(-?\d{1,3}(?:,\d{3})*\.\d{2})$"
     )
 
     rows = []
     for line in text.splitlines():
-        m = pattern.search(line.strip())
-        if m:
-            d, desc, amt, bal = m.groups()
-            rows.append({
-                "Date": d,
-                "Description": desc,
-                "Amount": float(amt.replace(",", "")),
-                "Balance": float(bal.replace(",", "")),
-            })
+        match = pattern.search(line.strip())
+        if match:
+            date, desc, amt, bal = match.groups()
+            rows.append(
+                {
+                    "Date": date,
+                    "Description": desc,
+                    "Amount": float(amt.replace(",", "")),
+                    "Balance": float(bal.replace(",", "")),
+                }
+            )
     return pd.DataFrame(rows)
 
-###########################################
-# 🔹 OFX / QFX / QBO (Manual Parser)
-###########################################
-def parse_ofx_text(text):
-    rows = []
 
-    # Extract each transaction block <STMTTRN> ... </STMTTRN>
+def parse_ofx_text(text: str) -> pd.DataFrame:
+    rows = []
     blocks = re.findall(r"<STMTTRN>(.*?)</STMTTRN>", text, flags=re.DOTALL)
 
     for block in blocks:
@@ -50,92 +46,208 @@ def parse_ofx_text(text):
         memo_match = re.search(r"<MEMO>(.*?)<", block)
         amount_match = re.search(r"<TRNAMT>(.*?)<", block)
 
-        if amount_match:
-            amount = float(amount_match.group(1))
-        else:
-            amount = None
+        amount = float(amount_match.group(1)) if amount_match else None
+        date_fmt = None
 
         if date_match:
             raw_date = date_match.group(1)
-            # Formats like: 20241005, 20241005120000[-5:EST]
             clean_date = re.sub(r"[^0-9]", "", raw_date)[:8]
-            date_fmt = f"{clean_date[4:6]}/{clean_date[6:8]}/{clean_date[:4]}"
-        else:
-            date_fmt = None
+            if len(clean_date) == 8:
+                date_fmt = f"{clean_date[4:6]}/{clean_date[6:8]}/{clean_date[:4]}"
 
-        memo = memo_match.group(1) if memo_match else None
-
-        rows.append({
-            "Date": date_fmt,
-            "Description": memo,
-            "Amount": amount,
-            "Balance": None
-        })
+        rows.append(
+            {
+                "Date": date_fmt,
+                "Description": memo_match.group(1) if memo_match else None,
+                "Amount": amount,
+                "Balance": None,
+            }
+        )
 
     return pd.DataFrame(rows)
 
-###########################################
-# 🔹 CSV / XLSX PARSER
-###########################################
-def parse_excel_csv(file):
-    try:
-        return pd.read_csv(file)
-    except:
-        file.seek(0)
-        return pd.read_excel(file)
 
-###########################################
-# 🔹 PDF PARSER (TEXT-ONLY)
-###########################################
-def parse_pdf_text(file):
+def parse_excel_csv(buffer: io.BytesIO) -> pd.DataFrame:
+    try:
+        return pd.read_csv(buffer)
+    except Exception:
+        buffer.seek(0)
+        return pd.read_excel(buffer)
+
+
+def parse_pdf_text(buffer: io.BytesIO) -> pd.DataFrame:
     rows = []
-    with pdfplumber.open(file) as pdf:
+    with pdfplumber.open(buffer) as pdf:
         for page in pdf.pages:
             text = page.extract_text()
             if not text:
                 continue
-            df = parse_txt(text)
-            if not df.empty:
-                rows.append(df)
+            df_page = parse_txt(text)
+            if not df_page.empty:
+                rows.append(df_page)
 
     if rows:
         return pd.concat(rows, ignore_index=True)
     return pd.DataFrame()
 
-###########################################
-# 🔹 MASTER PARSER
-###########################################
-def parse_file(uploaded):
-    name = uploaded.name.lower()
+
+def parse_file(uploaded_file) -> pd.DataFrame:
+    raw_data = uploaded_file.read()
+    name = uploaded_file.name.lower()
 
     if name.endswith(".txt"):
-        text = uploaded.read().decode("utf-8", errors="ignore")
-        return parse_txt(text)
+        return parse_txt(raw_data.decode("utf-8", errors="ignore"))
 
-    if name.endswith(".csv") or name.endswith(".xlsx"):
-        return parse_excel_csv(uploaded)
+    if name.endswith((".csv", ".xlsx")):
+        return parse_excel_csv(io.BytesIO(raw_data))
 
     if name.endswith(".pdf"):
-        return parse_pdf_text(uploaded)
+        return parse_pdf_text(io.BytesIO(raw_data))
 
     if name.endswith((".ofx", ".qfx", ".qbo")):
-        text = uploaded.read().decode("utf-8", errors="ignore")
+        text = raw_data.decode("utf-8", errors="ignore")
         return parse_ofx_text(text)
 
     raise ValueError("Unsupported format")
 
-###########################################
-# 🔹 PROCESSAMENTO
-###########################################
-if uploaded:
-    try:
-        df = parse_file(uploaded)
 
-        if df.empty:
-            st.warning("⚠️ File processed but no transactions were detected.")
-        else:
-            st.success("✅ File processed successfully!")
-            st.dataframe(df, use_container_width=True)
+# ------------------------------------------------------------
+# UI helpers
+# ------------------------------------------------------------
+def normalize_transactions(df: pd.DataFrame) -> pd.DataFrame:
+    normalized = df.copy()
+    if "Amount" in normalized.columns:
+        normalized["Amount"] = pd.to_numeric(normalized["Amount"], errors="coerce")
+    return normalized.dropna(subset=["Amount"]).reset_index(drop=True)
 
-    except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
+
+def format_currency(value: float) -> str:
+    if value is None or pd.isna(value):
+        return "-"
+    return f"${value:,.2f}"
+
+
+def calculate_summary(df: pd.DataFrame) -> dict:
+    total_in = df.loc[df["Amount"] > 0, "Amount"].sum()
+    total_out = df.loc[df["Amount"] < 0, "Amount"].sum()
+    return {
+        "entries": total_in,
+        "exits": total_out,
+        "count": len(df),
+    }
+
+
+def render_metrics(summary: dict):
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total de entradas", format_currency(summary["entries"]))
+    col2.metric("Total de saídas", format_currency(summary["exits"]))
+    col3.metric("Número de transações", f"{summary['count']:,}")
+
+
+def render_header(title: str, subtitle: str | None = None):
+    st.title(title)
+    if subtitle:
+        st.markdown(f"<p style='color:#6c757d;font-size:16px;'>{subtitle}</p>", unsafe_allow_html=True)
+
+
+# ------------------------------------------------------------
+# Sidebar navigation
+# ------------------------------------------------------------
+if "page" not in st.session_state:
+    st.session_state.page = "Resumo"
+
+page = st.sidebar.selectbox(
+    "Navegação",
+    options=["Resumo", "Detalhes"],
+    index=["Resumo", "Detalhes"].index(st.session_state.page),
+    key="page",
+)
+
+
+# ------------------------------------------------------------
+# Page: Summary (upload + metrics)
+# ------------------------------------------------------------
+if page == "Resumo":
+    render_header(
+        "Bank Statement Parser",
+        "Envie seu extrato e visualize um resumo claro e profissional.",
+    )
+
+    with st.container():
+        st.subheader("Upload do extrato")
+        uploaded = st.file_uploader(
+            "Envie arquivos PDF, CSV, XLSX, TXT, OFX, QFX ou QBO",
+            type=["pdf", "csv", "xlsx", "txt", "ofx", "qfx", "qbo"],
+            help="Aceitamos arquivos comuns de extratos bancários.",
+        )
+
+    if uploaded:
+        try:
+            df = normalize_transactions(parse_file(uploaded))
+            if df.empty:
+                st.warning("⚠️ Arquivo processado, mas nenhuma transação foi identificada.")
+            else:
+                df = df.dropna(axis=1, how="all")
+                st.session_state.transactions = df
+                summary = calculate_summary(df)
+
+                st.success("✅ Arquivo processado com sucesso!")
+                st.markdown("---")
+                st.subheader("Resumo do extrato")
+                render_metrics(summary)
+
+                st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
+                if st.button("📄 Ver detalhes do extrato", type="primary"):
+                    st.session_state.page = "Detalhes"
+                    st.experimental_rerun()
+
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"❌ Erro ao processar o arquivo: {exc}")
+    else:
+        st.info("Faça o upload do extrato para ver o resumo.")
+
+
+# ------------------------------------------------------------
+# Page: Details (full table)
+# ------------------------------------------------------------
+if page == "Detalhes":
+    render_header(
+        "📄 Detalhes do extrato",
+        "Visualize e filtre todas as transações processadas.",
+    )
+
+    df = st.session_state.get("transactions")
+    if df is None or df.empty:
+        st.info("Nenhum extrato carregado ainda. Volte para a página de Resumo e envie um arquivo.")
+    else:
+        df = normalize_transactions(df)
+        st.subheader("Filtros")
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            search = st.text_input("Filtrar por descrição", placeholder="Digite parte da descrição")
+
+        with col2:
+            amt_min = float(df["Amount"].min()) if not df["Amount"].isna().all() else 0.0
+            amt_max = float(df["Amount"].max()) if not df["Amount"].isna().all() else 0.0
+            amount_range = st.slider(
+                "Faixa de valor",
+                min_value=amt_min,
+                max_value=amt_max,
+                value=(amt_min, amt_max),
+                step=0.01,
+                format="%0.2f",
+            )
+
+        filtered = df.copy()
+        if search:
+            filtered = filtered[filtered["Description"].str.contains(search, case=False, na=False)]
+
+        filtered = filtered[
+            (filtered["Amount"] >= amount_range[0]) & (filtered["Amount"] <= amount_range[1])
+        ]
+
+        st.markdown("---")
+        st.subheader("Tabela completa")
+        st.dataframe(filtered, use_container_width=True)
+
