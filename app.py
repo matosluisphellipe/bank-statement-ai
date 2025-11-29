@@ -8,7 +8,8 @@ st.title("📊 Bank Statement Classifier – AI")
 st.write("Upload your bank statement in **PDF, CSV, or XLSX** format.")
 
 def process_csv(file):
-    df = pd.read_csv(file)
+    # Load even if the CSV has broken or uneven rows
+    df = pd.read_csv(file, engine="python", on_bad_lines="skip")
     return df
 
 def process_excel(file):
@@ -19,7 +20,9 @@ def process_pdf(file):
     with pdfplumber.open(file) as pdf:
         text = ""
         for page in pdf.pages:
-            text += page.extract_text() + "\n"
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
     df = pd.DataFrame({"PDF_Text": [text]})
     return df
 
