@@ -4,8 +4,8 @@ import pdfplumber
 import io
 import re
 
-st.set_page_config(page_title="Bank Statement Classifier – AI", layout="wide")
-st.title("🏦 Bank Statement Classifier – Bookkepper")
+st.set_page_config(page_title="Luis Phellipe de Matos", layout="wide")
+st.title("Luis Phellipe de Matos")
 
 uploaded = st.file_uploader(
     "Upload your bank statement",
