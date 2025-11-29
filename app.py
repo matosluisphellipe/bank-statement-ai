@@ -9,7 +9,7 @@ import streamlit as st
 st.set_page_config(
     page_title="Bank Statement Parser & Viewer",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 
@@ -151,23 +151,29 @@ def render_header(title: str, subtitle: str | None = None):
 
 
 # ------------------------------------------------------------
-# Sidebar navigation
+# Navigation state
 # ------------------------------------------------------------
 if "page" not in st.session_state:
-    st.session_state.page = "Resumo"
+    st.session_state.page = "main"
 
-page = st.sidebar.selectbox(
-    "Navegação",
-    options=["Resumo", "Detalhes"],
-    index=["Resumo", "Detalhes"].index(st.session_state.page),
-    key="page",
-)
+
+def go_to_details():
+    st.session_state.page = "details"
+    st.rerun()
+
+
+def go_to_main():
+    st.session_state.page = "main"
+    st.rerun()
+
+
+page = st.session_state.page
 
 
 # ------------------------------------------------------------
 # Page: Summary (upload + metrics)
 # ------------------------------------------------------------
-if page == "Resumo":
+if page == "main":
     render_header(
         "Bank Statement Parser",
         "Envie seu extrato e visualize um resumo claro e profissional.",
@@ -197,11 +203,7 @@ if page == "Resumo":
                 render_metrics(summary)
 
                 st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
-                st.button(
-                    "📄 Ver detalhes do extrato",
-                    type="primary",
-                    on_click=lambda: st.session_state.update(page="Detalhes"),
-                )
+                st.button("📄 Ver detalhes do extrato", type="primary", on_click=go_to_details)
 
         except Exception as exc:  # noqa: BLE001
             st.error(f"❌ Erro ao processar o arquivo: {exc}")
@@ -212,7 +214,7 @@ if page == "Resumo":
 # ------------------------------------------------------------
 # Page: Details (full table)
 # ------------------------------------------------------------
-if page == "Detalhes":
+if page == "details":
     render_header(
         "📄 Detalhes do extrato",
         "Visualize e filtre todas as transações processadas.",
@@ -221,35 +223,18 @@ if page == "Detalhes":
     df = st.session_state.get("transactions")
     if df is None or df.empty:
         st.info("Nenhum extrato carregado ainda. Volte para a página de Resumo e envie um arquivo.")
+        st.button("⬅️ Voltar", on_click=go_to_main)
     else:
         df = normalize_transactions(df)
         st.subheader("Filtros")
-        col1, col2 = st.columns([2, 1])
-
-        with col1:
-            search = st.text_input("Filtrar por descrição", placeholder="Digite parte da descrição")
-
-        with col2:
-            amt_min = float(df["Amount"].min()) if not df["Amount"].isna().all() else 0.0
-            amt_max = float(df["Amount"].max()) if not df["Amount"].isna().all() else 0.0
-            amount_range = st.slider(
-                "Faixa de valor",
-                min_value=amt_min,
-                max_value=amt_max,
-                value=(amt_min, amt_max),
-                step=0.01,
-                format="%0.2f",
-            )
+        search = st.text_input("Filtrar por descrição", placeholder="Digite parte da descrição")
 
         filtered = df.copy()
         if search:
             filtered = filtered[filtered["Description"].str.contains(search, case=False, na=False)]
 
-        filtered = filtered[
-            (filtered["Amount"] >= amount_range[0]) & (filtered["Amount"] <= amount_range[1])
-        ]
-
         st.markdown("---")
         st.subheader("Tabela completa")
         st.dataframe(filtered, use_container_width=True)
+        st.button("⬅️ Voltar", on_click=go_to_main)
 
