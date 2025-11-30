@@ -1222,13 +1222,18 @@ if page == "details":
             st.session_state.user_context = user_context
             st.session_state.context_ready = form_complete
 
-            confirm_disabled = not form_complete
-            if st.button("Confirmar e iniciar análise com IA", type="primary", disabled=confirm_disabled):
+            if not form_complete:
+                st.warning(
+                    "Você pode seguir para a análise de IA sem preencher todas as sessões, "
+                    "mas resultados melhores dependem das respostas completas."
+                )
+
+            if st.button("Confirmar e iniciar análise com IA", type="primary"):
                 st.session_state.run_ai_now = True
                 st.session_state.ai_error = None
-                st.experimental_rerun()
+                st.rerun()
 
-            if st.session_state.run_ai_now and form_complete:
+            if st.session_state.run_ai_now:
                 batch_size = 30
                 count = min(len(df), 2000)
                 total_batches = math.ceil(count / batch_size)
