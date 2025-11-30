@@ -11,14 +11,18 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if OPENAI_API_KEY is None:
+    st.error("OPENAI_API_KEY was not loaded. Check .env file.")
+    st.stop()
+
 st.set_page_config(
     page_title="AI Bookkeeping Assistant",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 
