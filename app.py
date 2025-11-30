@@ -135,7 +135,7 @@ if "lang" not in st.session_state:
 if "theme" not in st.session_state:
     st.session_state.theme = "light"
 if "page" not in st.session_state:
-    st.session_state.page = "main"
+    st.session_state.page = "upload"
 if "ai_processed" not in st.session_state:
     st.session_state.ai_processed = False
 if "ai_error" not in st.session_state:
@@ -296,6 +296,26 @@ def apply_theme_css():
         padding: 0.9rem 1rem;
         background: linear-gradient(180deg, rgba(35,141,255,0.06), rgba(0,0,0,0)) var(--panel);
         box-shadow: 0 12px 28px rgba(0,0,0,0.08);
+    }}
+    .check-card {{
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 1rem 1.1rem;
+        background: linear-gradient(180deg, rgba(0,102,255,0.04), rgba(0,0,0,0)) var(--panel);
+        box-shadow: 0 10px 26px rgba(0,0,0,0.07);
+        margin-bottom: 0.8rem;
+    }}
+    .check-card-title {{
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-bottom: 0.2rem;
+    }}
+    .check-card-value {{
+        color: var(--muted);
+        font-weight: 600;
+        margin-bottom: 0.6rem;
     }}
     .divider {{
         border-bottom: 1px solid var(--border);
@@ -480,6 +500,18 @@ def detect_check_numbers(df: pd.DataFrame) -> list[str]:
     return sorted(set(checks))
 
 
+def map_check_amounts(df: pd.DataFrame, check_numbers: list[str]) -> dict[str, float | None]:
+    amounts: dict[str, float | None] = {}
+    if "Description" not in df.columns or "Amount" not in df.columns:
+        return {f"Check {num}": None for num in check_numbers}
+
+    for number in check_numbers:
+        label = f"Check {number}"
+        mask = df["Description"].fillna("").str.contains(rf"check\s*{re.escape(number)}", case=False, regex=True)
+        amounts[label] = float(df.loc[mask, "Amount"].sum()) if mask.any() else None
+    return amounts
+
+
 def extract_vendor_candidates(df: pd.DataFrame, top_n: int = 5) -> list[str]:
     if "Description" not in df.columns:
         return []
@@ -601,23 +633,40 @@ def render_context_form(df: pd.DataFrame) -> tuple[dict, bool]:
     st.markdown("### Sessão 3 — Tratamento especial para Cheques")
     check_info: dict[str, dict] = {}
     auto_create_vendors = None
+    check_amounts = map_check_amounts(df, check_numbers)
     if check_numbers:
         st.warning("Pagamentos via cheque encontrados. Preencha os detalhes abaixo.")
         for number in check_numbers:
             label = f"Check {number}"
-            vendor_input = st.text_input(f"{label} - quem recebeu?", key=f"check_vendor_{number}")
+            amount_display = format_currency(check_amounts.get(label))
+            st.markdown("<div class='check-card'>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div class='check-card-title'>💳 {label}</div><div class='check-card-value'>Valor: {amount_display}</div>",
+                unsafe_allow_html=True,
+            )
             payee_type = st.radio(
-                f"Esses pagamentos são para quem? ({label})",
+                "Quem recebeu esse cheque?",
                 ["Contractor (1099)", "Funcionário (Payroll/W2)", "Despesa operacional", "Outro"],
                 key=f"check_type_{number}",
             )
-            other_detail = st.text_input(
-                f"Outro - detalhe ({label})", key=f"check_other_{number}", value=st.session_state.get(f"check_other_{number}", "")
-            )
+            vendor_input = st.text_input("Nome do recebedor (opcional)", key=f"check_vendor_{number}")
+            other_detail = ""
+            if payee_type == "Outro":
+                other_detail = st.text_input("Descreva o tipo de pagamento", key=f"check_other_{number}")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            vendor_clean = vendor_input.strip()
+            auto_contractor = False
+            if payee_type == "Contractor (1099)" and not vendor_clean:
+                vendor_clean = "Contractor 1099 - não informado"
+                auto_contractor = True
+
             check_info[label] = {
-                "vendor": vendor_input.strip(),
+                "vendor": vendor_clean,
                 "type": payee_type,
                 "other_detail": other_detail.strip(),
+                "amount": check_amounts.get(label),
+                "auto_contractor": auto_contractor,
             }
         auto_create_vendors = st.radio(
             "Esses fornecedores devem ser criados automaticamente no Zoho/QuickBooks?",
@@ -629,39 +678,6 @@ def render_context_form(df: pd.DataFrame) -> tuple[dict, bool]:
     st.session_state.check_info = check_info
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### Sessão 4 — Perguntas para melhorar a classificação")
-    custom_categories = st.text_area(
-        "Cite categorias de despesa específicas usadas pela sua empresa.", key="custom_categories"
-    )
-    misclassifications = st.text_area(
-        "Há algum gasto que a IA costuma classificar errado? Liste aqui.", key="common_misclassifications"
-    )
-    prioritize = st.radio(
-        "Você deseja priorizar a classificação por:",
-        ["Contabilidade precisa (mais lenta)", "Classificação rápida (menos precisa)"],
-        key="prioritize_accuracy",
-    )
-    recurring_payments = st.text_area(
-        "Pagamentos recorrentes (assinaturas, serviços mensais): Liste nomes para identificação mais precisa.",
-        key="recurring_payments",
-    )
-    clarifications = ""
-    unusual_explanations = ""
-    if has_generic:
-        clarifications = st.text_area(
-            "Explique transações genéricas ou suspeitas identificadas.",
-            key="generic_clarifications",
-            help="Campo exibido automaticamente quando detectamos descrições genéricas.",
-        )
-    if has_unusual:
-        unusual_explanations = st.text_area(
-            "Descreva padrões incomuns ou valores atípicos encontrados no extrato.",
-            key="unusual_explanations",
-            help="Campo exibido automaticamente quando detectamos padrões incomuns.",
-        )
-    st.markdown("</div>", unsafe_allow_html=True)
-
     user_context = {
         "business_type": business_type.strip(),
         "business_model": business_model,
@@ -671,12 +687,12 @@ def render_context_form(df: pd.DataFrame) -> tuple[dict, bool]:
         "vendor_override_types": st.session_state.get("vendor_override_types", {}),
         "check_transactions": st.session_state.get("check_info", {}),
         "auto_create_vendors": auto_create_vendors == "Sim" if auto_create_vendors is not None else None,
-        "custom_categories": custom_categories.strip(),
-        "common_misclassifications": misclassifications.strip(),
-        "prioritize_accuracy": prioritize.startswith("Contabilidade precisa"),
-        "recurring_payments": recurring_payments.strip(),
-        "generic_clarifications": clarifications.strip(),
-        "unusual_explanations": unusual_explanations.strip(),
+        "custom_categories": "",
+        "common_misclassifications": "",
+        "prioritize_accuracy": True,
+        "recurring_payments": "",
+        "generic_clarifications": "",
+        "unusual_explanations": "",
         "has_generic_descriptions": has_generic,
         "has_unusual_patterns": has_unusual,
     }
@@ -685,35 +701,26 @@ def render_context_form(df: pd.DataFrame) -> tuple[dict, bool]:
     for number in check_numbers:
         label = f"Check {number}"
         details = check_info.get(label, {})
-        required_fields.append(details.get("vendor"))
         required_fields.append(details.get("type"))
     if check_numbers:
         required_fields.append(auto_create_vendors)
-    if has_generic:
-        required_fields.append(clarifications)
-    if has_unusual:
-        required_fields.append(unusual_explanations)
 
     is_complete = all(bool(field) for field in required_fields)
 
     st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### Sessão 5 — Resumo das respostas e validação")
+    st.markdown("### Sessão 4 — Resumo das respostas e validação")
     st.markdown(
         """
         - Tipo de negócio: **{business}**
         - Modelo: **{model}**
         - Vendedores confirmados: **{vendors}**
-        - Categorias específicas: **{categories}**
-        - Erros comuns informados: **{mistakes}**
         - Contratados pagos por cheque: **{checks}**
         """.format(
             business=business_type or "(preencha)",
             model=business_model,
             vendors=", ".join(vendor_overrides.values()) if vendor_overrides else "(nenhum)",
-            categories=custom_categories or "(não informado)",
-            mistakes=misclassifications or "(não informado)",
             checks=", ".join([
-                f"{label}: {details.get('vendor') or 'pendente'}" for label, details in check_info.items()
+                f"{label}: {details.get('vendor') or details.get('type') or 'pendente'}" for label, details in check_info.items()
             ])
             or "(não há cheques)",
         )
@@ -1152,9 +1159,9 @@ apply_theme_css()
 page = st.session_state.page
 
 # ------------------------------------------------------------
-# Page: Summary (upload + metrics)
+# Page 1: Upload & resumo
 # ------------------------------------------------------------
-if page == "main":
+if page == "upload":
     st.markdown("<div class='hero-card'>", unsafe_allow_html=True)
     st.markdown(
         f"<div style='font-size:30px;font-weight:800;color:var(--text);'>{tr('hero_primary')}</div>"
@@ -1193,8 +1200,8 @@ if page == "main":
 
                 st.info(tr("upload_info"))
 
-                if st.button(tr("upload_cta"), type="primary"):
-                    st.session_state.page = "details"
+                if st.button("Ir para formulário de refinamento", type="primary"):
+                    st.session_state.page = "refinement"
         except Exception as exc:  # noqa: BLE001
             st.error(tr("upload_error", error=exc))
     else:
@@ -1203,233 +1210,272 @@ if page == "main":
 
 
 # ------------------------------------------------------------
-# Page: Details (AI analysis + exports)
+# Page 2: Formulário de refinamento
 # ------------------------------------------------------------
-if page == "details":
+if page == "refinement":
+    df = st.session_state.get("df")
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("## Formulário de refinamento")
+    st.markdown(
+        "<div style='color:var(--muted);'>Todas as perguntas aparecem aqui para preparar a análise com IA.</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if df is None or df.empty:
+        st.info(tr("no_file_info"))
+        if st.button(tr("button_back")):
+            st.session_state.page = "upload"
+    else:
+        user_context, form_complete = render_context_form(df)
+        st.session_state.user_context = user_context
+        st.session_state.context_ready = form_complete
+
+        col_nav1, col_nav2 = st.columns([1, 1])
+        with col_nav1:
+            if st.button(tr("button_back")):
+                st.session_state.page = "upload"
+        with col_nav2:
+            if st.button("Ir para análise com IA", type="primary"):
+                st.session_state.page = "analysis"
+
+
+# ------------------------------------------------------------
+# Page 3: Análise com IA
+# ------------------------------------------------------------
+if page == "analysis":
+    df = st.session_state.get("df")
     st.markdown("<div class='section-card'>", unsafe_allow_html=True)
     st.markdown(f"## {tr('details_title')}")
     st.markdown(f"<div style='color:var(--muted);'>{tr('details_subtitle')}</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    df = st.session_state.get("df")
     if df is None or df.empty:
         st.info(tr("no_file_info"))
         if st.button(tr("button_back")):
-            st.session_state.page = "main"
+            st.session_state.page = "upload"
     else:
-        if not st.session_state.ai_processed:
-            user_context, form_complete = render_context_form(df)
-            st.session_state.user_context = user_context
-            st.session_state.context_ready = form_complete
+        if not st.session_state.context_ready:
+            st.warning("Complete o formulário de refinamento antes de iniciar a análise com IA.")
+            if st.button("Voltar para o formulário"):
+                st.session_state.page = "refinement"
+        else:
+            if not st.session_state.ai_processed:
 
-            if not form_complete:
-                st.warning(
-                    "Você pode seguir para a análise de IA sem preencher todas as sessões, "
-                    "mas resultados melhores dependem das respostas completas."
-                )
+                def _start_ai_analysis():
+                    st.session_state.run_ai_now = True
+                    st.session_state.ai_error = None
 
-            if st.button("Confirmar e iniciar análise com IA", type="primary"):
-                st.session_state.run_ai_now = True
-                st.session_state.ai_error = None
-                st.rerun()
+                st.button("Iniciar análise com IA", type="primary", on_click=_start_ai_analysis)
 
-            if st.session_state.run_ai_now:
-                batch_size = 30
-                count = min(len(df), 2000)
-                total_batches = math.ceil(count / batch_size)
+                if st.session_state.run_ai_now:
+                    batch_size = 30
+                    count = min(len(df), 2000)
 
-                st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-                st.markdown(f"### {tr('ai_progress_title')}")
-                status_placeholder = st.empty()
-                status_placeholder.markdown(
-                    f"<div class='progress-text'>{tr('ai_progress_start')}</div>", unsafe_allow_html=True
-                )
-                progress_placeholder = st.empty()
-                progress_placeholder.markdown(
-                    "<div class='progress-bar'><span style='width:0%'></span></div>", unsafe_allow_html=True
-                )
-                status_placeholder.markdown(
-                    f"<div class='progress-text'>{tr('ai_progress_sending')}</div>", unsafe_allow_html=True
-                )
-
-                try:
-                    ai_df = run_ai_categorization(
-                        df,
-                        user_context=user_context,
-                        progress_placeholder=progress_placeholder,
-                        status_placeholder=status_placeholder,
+                    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                    st.markdown(f"### {tr('ai_progress_title')}")
+                    status_placeholder = st.empty()
+                    status_placeholder.markdown(
+                        f"<div class='progress-text'>{tr('ai_progress_start')}</div>", unsafe_allow_html=True
                     )
+                    progress_placeholder = st.empty()
                     progress_placeholder.markdown(
-                        "<div class='progress-bar'><span style='width:100%'></span></div>",
-                        unsafe_allow_html=True,
+                        "<div class='progress-bar'><span style='width:0%'></span></div>", unsafe_allow_html=True
                     )
                     status_placeholder.markdown(
-                        f"<div class='progress-text'>{tr('ai_done')}</div>", unsafe_allow_html=True
+                        f"<div class='progress-text'>{tr('ai_progress_sending')}</div>", unsafe_allow_html=True
                     )
-                    st.session_state.df_ai = ai_df
-                    st.session_state.ai_processed = True
-                    st.session_state.ai_error = None
-                    st.session_state.run_ai_now = False
-                except Exception as exc:  # noqa: BLE001
-                    progress_placeholder.empty()
-                    status_placeholder.empty()
-                    st.session_state.ai_error = str(exc)
+
+                    try:
+                        ai_df = run_ai_categorization(
+                            df,
+                            user_context=st.session_state.get("user_context", {}),
+                            progress_placeholder=progress_placeholder,
+                            status_placeholder=status_placeholder,
+                        )
+                        progress_placeholder.markdown(
+                            "<div class='progress-bar'><span style='width:100%'></span></div>",
+                            unsafe_allow_html=True,
+                        )
+                        status_placeholder.markdown(
+                            f"<div class='progress-text'>{tr('ai_done')}</div>", unsafe_allow_html=True
+                        )
+                        st.session_state.df_ai = ai_df
+                        st.session_state.ai_processed = True
+                        st.session_state.ai_error = None
+                        st.session_state.run_ai_now = False
+                    except Exception as exc:  # noqa: BLE001
+                        progress_placeholder.empty()
+                        status_placeholder.empty()
+                        st.session_state.ai_error = str(exc)
+                        st.session_state.ai_processed = False
+                        st.session_state.run_ai_now = False
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+            if st.session_state.ai_error:
+                st.error(f"{tr('ai_failed')}: {st.session_state.ai_error}")
+
+                def _retry_ai():
                     st.session_state.ai_processed = False
-                    st.session_state.run_ai_now = False
+                    st.session_state.ai_error = None
+                    st.session_state.run_ai_now = True
+
+                st.button(tr("ai_retry"), on_click=_retry_ai)
+            elif st.session_state.ai_processed:
+                ai_df = st.session_state.df_ai
+                st.success(tr("ai_done"))
+
+                st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                st.markdown(f"## {tr('ai_overview')}")
+                generate_report_cards(ai_df)
                 st.markdown("</div>", unsafe_allow_html=True)
 
-        if st.session_state.ai_error:
-            st.error(f"{tr('ai_failed')}: {st.session_state.ai_error}")
-            if st.button(tr("ai_retry")):
-                st.session_state.ai_processed = False
-                st.session_state.ai_error = None
-                st.rerun()
-        elif st.session_state.ai_processed:
-            ai_df = st.session_state.df_ai
-            st.success(tr("ai_done"))
+                st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                plotly_template = "plotly_dark" if st.session_state.get("theme") == "dark" else "plotly_white"
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"#### {tr('chart_expenses')}")
+                    expense_totals = prepare_category_totals(ai_df, positive=False)
+                    if not expense_totals.empty:
+                        fig_expense = px.bar(
+                            expense_totals,
+                            x="Total",
+                            y="Category",
+                            orientation="h",
+                            text="Total",
+                            color="Total",
+                            color_continuous_scale="Blues",
+                            template=plotly_template,
+                            height=420,
+                        )
+                        fig_expense.update_traces(
+                            marker_line_color="#0f4c75", marker_line_width=1.4, texttemplate="%{text:$,.0f}"
+                        )
+                        fig_expense.update_layout(
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            xaxis_title=tr("summary_exits"),
+                            yaxis_title=tr("category_label"),
+                            margin=dict(l=0, r=0, t=40, b=0),
+                            font=dict(size=14),
+                        )
+                        st.plotly_chart(fig_expense, use_container_width=True)
+                    else:
+                        st.info(tr("no_expenses"))
+                with col2:
+                    st.markdown(f"#### {tr('chart_income')}")
+                    income_totals = prepare_category_totals(ai_df, positive=True)
+                    if not income_totals.empty:
+                        fig_income = px.bar(
+                            income_totals,
+                            x="Category",
+                            y="Total",
+                            text="Total",
+                            color="Total",
+                            color_continuous_scale="Teal",
+                            template=plotly_template,
+                            height=420,
+                        )
+                        fig_income.update_traces(
+                            marker_line_color="#0066ff", marker_line_width=1.4, texttemplate="%{text:$,.0f}"
+                        )
+                        fig_income.update_layout(
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            xaxis_title=tr("category_label"),
+                            yaxis_title=tr("summary_entries"),
+                            margin=dict(l=0, r=0, t=40, b=0),
+                            font=dict(size=14),
+                        )
+                        st.plotly_chart(fig_income, use_container_width=True)
+                    else:
+                        st.info(tr("no_income"))
+                st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-            st.markdown(f"## {tr('ai_overview')}")
-            generate_report_cards(ai_df)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-            plotly_template = "plotly_dark" if st.session_state.get("theme") == "dark" else "plotly_white"
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"#### {tr('chart_expenses')}")
-                expense_totals = prepare_category_totals(ai_df, positive=False)
-                if not expense_totals.empty:
-                    fig_expense = px.bar(
-                        expense_totals,
-                        x="Total",
-                        y="Category",
-                        orientation="h",
-                        text="Total",
-                        color="Total",
-                        color_continuous_scale="Blues",
+                st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                st.markdown(f"#### {tr('chart_balance')}")
+                balance_df = ai_df.copy()
+                balance_df["Amount"] = pd.to_numeric(balance_df["Amount"], errors="coerce")
+                balance_df["Date"] = pd.to_datetime(balance_df["Date"], errors="coerce")
+                balance_df = balance_df.replace([math.inf, -math.inf], pd.NA).dropna(subset=["Date", "Amount"])
+                balance_df = balance_df.sort_values("Date")
+                balance_df["Running Balance"] = balance_df["Amount"].cumsum()
+                if not balance_df.empty:
+                    balance_chart = px.line(
+                        balance_df,
+                        x="Date",
+                        y="Running Balance",
+                        markers=True,
+                        line_shape="spline",
                         template=plotly_template,
                         height=420,
                     )
-                    fig_expense.update_traces(marker_line_color="#0f4c75", marker_line_width=1.4, texttemplate="%{text:$,.0f}")
-                    fig_expense.update_layout(
+                    balance_chart.update_layout(
                         plot_bgcolor="rgba(0,0,0,0)",
                         paper_bgcolor="rgba(0,0,0,0)",
-                        xaxis_title=tr("summary_exits"),
-                        yaxis_title=tr("category_label"),
-                        margin=dict(l=0, r=0, t=40, b=0),
+                        margin=dict(l=0, r=0, t=30, b=0),
+                        hovermode="x unified",
                         font=dict(size=14),
                     )
-                    st.plotly_chart(fig_expense, use_container_width=True)
+                    st.plotly_chart(balance_chart, use_container_width=True)
                 else:
-                    st.info(tr("no_expenses"))
-            with col2:
-                st.markdown(f"#### {tr('chart_income')}")
-                income_totals = prepare_category_totals(ai_df, positive=True)
-                if not income_totals.empty:
-                    fig_income = px.bar(
-                        income_totals,
-                        x="Category",
-                        y="Total",
-                        text="Total",
-                        color="Total",
-                        color_continuous_scale="Teal",
-                        template=plotly_template,
-                        height=420,
+                    st.info(tr("file_empty"))
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                st.markdown("<div class='section-card styled-table'>", unsafe_allow_html=True)
+                st.markdown(f"#### {tr('table_full')}")
+                st.dataframe(
+                    ai_df[
+                        [
+                            "Date",
+                            "Description",
+                            "Amount",
+                            "AI_Category",
+                            "AI_Transaction_Type",
+                            "AI_Vendor",
+                            "AI_Customer",
+                            "AI_Account_Name",
+                            "AI_Notes",
+                        ]
+                    ],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                st.markdown(f"### {tr('export_section')}")
+                zoho_csv, qb_csv, vendors_csv = prepare_downloads(ai_df)
+                colz, colq, colv = st.columns(3)
+                with colz:
+                    st.download_button(
+                        tr("download_zoho"),
+                        data=zoho_csv,
+                        file_name="zoho_books_transactions.csv",
+                        mime="text/csv",
                     )
-                    fig_income.update_traces(marker_line_color="#0066ff", marker_line_width=1.4, texttemplate="%{text:$,.0f}")
-                    fig_income.update_layout(
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        xaxis_title=tr("category_label"),
-                        yaxis_title=tr("summary_entries"),
-                        margin=dict(l=0, r=0, t=40, b=0),
-                        font=dict(size=14),
+                with colq:
+                    st.download_button(
+                        tr("download_qb"),
+                        data=qb_csv,
+                        file_name="quickbooks_transactions.csv",
+                        mime="text/csv",
                     )
-                    st.plotly_chart(fig_income, use_container_width=True)
-                else:
-                    st.info(tr("no_income"))
-            st.markdown("</div>", unsafe_allow_html=True)
+                with colv:
+                    st.download_button(
+                        tr("download_vendors"),
+                        data=vendors_csv,
+                        file_name="vendors.csv",
+                        mime="text/csv",
+                    )
 
-            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-            st.markdown(f"#### {tr('chart_balance')}")
-            balance_df = ai_df.copy()
-            balance_df["Amount"] = pd.to_numeric(balance_df["Amount"], errors="coerce")
-            balance_df["Date"] = pd.to_datetime(balance_df["Date"], errors="coerce")
-            balance_df = balance_df.replace([math.inf, -math.inf], pd.NA).dropna(subset=["Date", "Amount"])
-            balance_df = balance_df.sort_values("Date")
-            balance_df["Running Balance"] = balance_df["Amount"].cumsum()
-            if not balance_df.empty:
-                balance_chart = px.line(
-                    balance_df,
-                    x="Date",
-                    y="Running Balance",
-                    markers=True,
-                    line_shape="spline",
-                    template=plotly_template,
-                    height=420,
-                )
-                balance_chart.update_layout(
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    margin=dict(l=0, r=0, t=30, b=0),
-                    hovermode="x unified",
-                    font=dict(size=14),
-                )
-                st.plotly_chart(balance_chart, use_container_width=True)
-            else:
-                st.info(tr("file_empty"))
-            st.markdown("</div>", unsafe_allow_html=True)
+                if len(df) > 2000:
+                    st.warning(tr("ai_only_first_2000"))
 
-            st.markdown("<div class='section-card styled-table'>", unsafe_allow_html=True)
-            st.markdown(f"#### {tr('table_full')}")
-            st.dataframe(
-                ai_df[
-                    [
-                        "Date",
-                        "Description",
-                        "Amount",
-                        "AI_Category",
-                        "AI_Transaction_Type",
-                        "AI_Vendor",
-                        "AI_Customer",
-                        "AI_Account_Name",
-                        "AI_Notes",
-                    ]
-                ],
-                use_container_width=True,
-                hide_index=True,
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-            st.markdown(f"### {tr('export_section')}")
-            zoho_csv, qb_csv, vendors_csv = prepare_downloads(ai_df)
-            colz, colq, colv = st.columns(3)
-            with colz:
-                st.download_button(
-                    tr("download_zoho"),
-                    data=zoho_csv,
-                    file_name="zoho_books_transactions.csv",
-                    mime="text/csv",
-                )
-            with colq:
-                st.download_button(
-                    tr("download_qb"),
-                    data=qb_csv,
-                    file_name="quickbooks_transactions.csv",
-                    mime="text/csv",
-                )
-            with colv:
-                st.download_button(
-                    tr("download_vendors"),
-                    data=vendors_csv,
-                    file_name="vendors.csv",
-                    mime="text/csv",
-                )
-
-            if len(df) > 2000:
-                st.warning(tr("ai_only_first_2000"))
-
-        if st.button(tr("button_back")):
-            st.session_state.page = "main"
+        col_nav1, col_nav2 = st.columns([1, 1])
+        with col_nav1:
+            if st.button(tr("button_back")):
+                st.session_state.page = "refinement"
+        with col_nav2:
+            if st.button("Voltar para upload"):
+                st.session_state.page = "upload"
