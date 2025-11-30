@@ -215,6 +215,90 @@ def apply_theme_css():
         box-shadow: 0 14px 40px rgba(0,0,0,0.1);
         margin-bottom: 1rem;
     }}
+    .refinement-grid {{
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.9rem;
+    }}
+    .refinement-card {{
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1rem 1.15rem 1.05rem;
+        box-shadow: 0 18px 44px rgba(0,0,0,0.08);
+    }}
+    .card-header {{
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 0.25rem;
+    }}
+    .card-title {{
+        font-weight: 800;
+        font-size: 1.05rem;
+    }}
+    .card-subtitle {{
+        color: var(--muted);
+        font-size: 0.95rem;
+        margin-bottom: 0.35rem;
+    }}
+    .pill-badge {{
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: rgba(0,102,255,0.08);
+        color: var(--text);
+        border: 1px solid var(--border);
+        padding: 0.4rem 0.65rem;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 0.92rem;
+    }}
+    .compact-input input, .compact-input textarea {{
+        padding: 0.55rem 0.65rem !important;
+        border-radius: 12px !important;
+        border: 1px solid var(--border) !important;
+        background: rgba(0,0,0,0.02) !important;
+    }}
+    .compact-input textarea {{ min-height: 90px; }}
+    .refinement-card .stRadio > label {{ font-weight: 700; color: var(--text); }}
+    .refinement-card .stRadio [data-baseweb="radio"] label {{ font-weight: 600; }}
+    .vendor-grid {{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 0.6rem;
+    }}
+    .vendor-card, .mini-card {{
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 0.75rem 0.85rem;
+        background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0)) var(--panel);
+        box-shadow: 0 12px 34px rgba(0,0,0,0.06);
+    }}
+    .vendor-title {{ font-weight: 800; }}
+    .check-grid {{ display: grid; gap: 0.7rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }}
+    .check-card {{
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 0.95rem 1rem;
+        background: linear-gradient(180deg, rgba(0,102,255,0.05), rgba(0,0,0,0)) var(--panel);
+        box-shadow: 0 18px 44px rgba(0,0,0,0.08);
+        margin-bottom: 0;
+    }}
+    .check-card-title {{
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-bottom: 0.1rem;
+    }}
+    .check-card-value {{
+        color: var(--muted);
+        font-weight: 700;
+        margin-bottom: 0.4rem;
+    }}
+    .summary-inline {{ display: grid; gap: 0.4rem; }}
+    .refinement-actions {{ display: flex; justify-content: flex-end; gap: 0.5rem; }}
     .stat-grid {{
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -590,52 +674,110 @@ def render_context_form(df: pd.DataFrame) -> tuple[dict, bool]:
     has_generic = detect_generic_transactions(df)
     has_unusual = detect_unusual_patterns(df)
 
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### Sessão 1 — Identificação da Empresa")
-    business_type = st.text_input("Tipo de negócio (obrigatório)", key="business_type_user_input")
-    products_services = st.text_area(
-        "Liste serviços/produtos típicos que sua empresa vende.", key="business_products_services"
+    st.markdown("<div class='refinement-grid'>", unsafe_allow_html=True)
+
+    st.markdown("<div class='refinement-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='card-header'><span>🏢</span><div class='card-title'>Sobre a Empresa</div></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='card-subtitle'>Informações essenciais para refinar a classificação da IA.</div>",
+        unsafe_allow_html=True,
     )
-    business_model = st.radio("Modelo de operação (obrigatório)", ["Serviços", "Produto", "Misto"], key="business_model")
-    pays_contractors = st.radio(
-        "Você paga contratados (1099) regularmente?", ["Sim", "Não"], key="pays_contractors"
-    )
+    with st.container():
+        col1, col2 = st.columns([1.2, 1])
+        with col1:
+            with st.container():
+                st.markdown("<div class='compact-input'>", unsafe_allow_html=True)
+                business_type = st.text_input(
+                    "Tipo de negócio (obrigatório)",
+                    key="business_type_user_input",
+                    placeholder="Construção, agência, restaurante...",
+                )
+                st.markdown("</div>", unsafe_allow_html=True)
+        with col2:
+            pays_contractors = st.radio(
+                "Paga contratados 1099 regularmente?",
+                ["Sim", "Não"],
+                key="pays_contractors",
+                horizontal=True,
+            )
+    with st.container():
+        col3, col4 = st.columns([1.2, 1])
+        with col3:
+            st.markdown("<div class='compact-input'>", unsafe_allow_html=True)
+            products_services = st.text_area(
+                "Serviços / produtos principais",
+                key="business_products_services",
+                placeholder="Ex: manutenção HVAC, consultoria, software mensal...",
+                height=90,
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+        with col4:
+            business_model = st.radio(
+                "Modelo de operação (obrigatório)",
+                ["Serviços", "Produto", "Misto"],
+                key="business_model",
+                horizontal=True,
+            )
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### Sessão 2 — Vendors importantes")
+    st.markdown("<div class='refinement-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='card-header'><span>🏷️</span><div class='card-title'>Fornecedores relevantes</div></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='card-subtitle'>Confirme nomes e tipos para manter o padrão visual dos relatórios.</div>",
+        unsafe_allow_html=True,
+    )
     vendor_overrides: dict[str, str] = {}
     vendor_override_types: dict[str, str] = {}
     if vendor_candidates:
-        st.markdown("Confirme ou ajuste o nome correto desses fornecedores:")
+        st.markdown("<div class='vendor-grid'>", unsafe_allow_html=True)
         for vendor in vendor_candidates:
             normalized = vendor.upper()
             default_value = st.session_state.vendor_overrides.get(normalized, vendor.title())
+            st.markdown("<div class='vendor-card'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='vendor-title'>🔁 {vendor.title()}</div>", unsafe_allow_html=True)
+            st.markdown("<div class='compact-input'>", unsafe_allow_html=True)
             user_value = st.text_input(
-                f"Vendor recomendado: {vendor.title()}", value=default_value, key=f"vendor_override_{normalized}"
+                "Nome exibido",
+                value=default_value,
+                key=f"vendor_override_{normalized}",
+                placeholder="Nome correto",
             )
+            st.markdown("</div>", unsafe_allow_html=True)
             user_value = user_value.strip() or vendor.title()
             vendor_overrides[normalized] = user_value
             type_options = ["Expense Category", "Income Category", "Transfer", "Outro"]
             stored_type = st.session_state.get(f"vendor_type_{normalized}", "Expense Category")
             default_type = stored_type if stored_type in type_options else "Expense Category"
             vendor_type = st.selectbox(
-                "Tipo sugerido", type_options, key=f"vendor_type_{normalized}", index=type_options.index(default_type)
+                "Tipo sugerido",
+                type_options,
+                key=f"vendor_type_{normalized}",
+                index=type_options.index(default_type),
+                help="Como devemos tratar esse fornecedor na exportação",
             )
             vendor_override_types[normalized] = vendor_type
+            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         st.session_state.vendor_overrides = vendor_overrides
         st.session_state.vendor_override_types = vendor_override_types
     else:
-        st.info("Nenhum fornecedor recorrente detectado ainda.")
+        st.markdown(
+            "<div class='mini-card'>ℹ Nenhum fornecedor recorrente detectado até agora.</div>",
+            unsafe_allow_html=True,
+        )
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### Sessão 3 — Tratamento especial para Cheques")
+    st.markdown("<div class='refinement-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='card-header'><span>💳</span><div class='card-title'>Pagamentos via Cheque</div></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='card-subtitle'>Cada cheque aparece como um card compacto para você classificar rapidamente.</div>",
+        unsafe_allow_html=True,
+    )
     check_info: dict[str, dict] = {}
     auto_create_vendors = None
     check_amounts = map_check_amounts(df, check_numbers)
     if check_numbers:
-        st.warning("Pagamentos via cheque encontrados. Preencha os detalhes abaixo.")
+        st.markdown("<div class='check-grid'>", unsafe_allow_html=True)
         for number in check_numbers:
             label = f"Check {number}"
             amount_display = format_currency(check_amounts.get(label))
@@ -645,14 +787,15 @@ def render_context_form(df: pd.DataFrame) -> tuple[dict, bool]:
                 unsafe_allow_html=True,
             )
             payee_type = st.radio(
-                "Quem recebeu esse cheque?",
+                "Selecione o tipo de pagamento:",
                 ["Contractor (1099)", "Funcionário (Payroll/W2)", "Despesa operacional", "Outro"],
                 key=f"check_type_{number}",
+                horizontal=True,
             )
-            vendor_input = st.text_input("Nome do recebedor (opcional)", key=f"check_vendor_{number}")
+            vendor_input = st.text_input("Nome do recebedor (opcional):", key=f"check_vendor_{number}")
             other_detail = ""
             if payee_type == "Outro":
-                other_detail = st.text_input("Descreva o tipo de pagamento", key=f"check_other_{number}")
+                other_detail = st.text_input("Outro - detalhe", key=f"check_other_{number}")
             st.markdown("</div>", unsafe_allow_html=True)
 
             vendor_clean = vendor_input.strip()
@@ -668,13 +811,21 @@ def render_context_form(df: pd.DataFrame) -> tuple[dict, bool]:
                 "amount": check_amounts.get(label),
                 "auto_contractor": auto_contractor,
             }
+        st.markdown("</div>", unsafe_allow_html=True)
+        if any(details.get("auto_contractor") for details in check_info.values()):
+            for label, details in check_info.items():
+                if not details.get("vendor"):
+                    details["vendor"] = "Contractor 1099 - não informado"
+                details["type"] = "Contractor (1099)"
+                details["auto_contractor"] = True
         auto_create_vendors = st.radio(
-            "Esses fornecedores devem ser criados automaticamente no Zoho/QuickBooks?",
+            "Criar fornecedores automaticamente no Zoho/QuickBooks?",
             ["Sim", "Não"],
             key="check_auto_create",
+            horizontal=True,
         )
     else:
-        st.info("Nenhuma transação de cheque detectada.")
+        st.markdown("<div class='mini-card'>💡 Nenhuma transação de cheque detectada.</div>", unsafe_allow_html=True)
     st.session_state.check_info = check_info
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -707,14 +858,17 @@ def render_context_form(df: pd.DataFrame) -> tuple[dict, bool]:
 
     is_complete = all(bool(field) for field in required_fields)
 
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("### Sessão 4 — Resumo das respostas e validação")
+    st.markdown("<div class='refinement-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='card-header'><span>🧭</span><div class='card-title'>Resumo rápido</div></div>", unsafe_allow_html=True)
+    st.markdown("<div class='card-subtitle'>Confirme se tudo está alinhado antes de enviar para a IA.</div>", unsafe_allow_html=True)
     st.markdown(
         """
-        - Tipo de negócio: **{business}**
-        - Modelo: **{model}**
-        - Vendedores confirmados: **{vendors}**
-        - Contratados pagos por cheque: **{checks}**
+        <div class='summary-inline'>
+            <div class='pill-badge'>🏢 {business}</div>
+            <div class='pill-badge'>🧩 {model}</div>
+            <div class='pill-badge'>🏷️ {vendors}</div>
+            <div class='pill-badge'>💳 {checks}</div>
+        </div>
         """.format(
             business=business_type or "(preencha)",
             model=business_model,
@@ -723,8 +877,11 @@ def render_context_form(df: pd.DataFrame) -> tuple[dict, bool]:
                 f"{label}: {details.get('vendor') or details.get('type') or 'pendente'}" for label, details in check_info.items()
             ])
             or "(não há cheques)",
-        )
+        ),
+        unsafe_allow_html=True,
     )
+    st.markdown("</div>", unsafe_allow_html=True)
+
     st.markdown("</div>", unsafe_allow_html=True)
 
     return user_context, is_complete
@@ -1215,9 +1372,9 @@ if page == "upload":
 if page == "refinement":
     df = st.session_state.get("df")
     st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("## Formulário de refinamento")
+    st.markdown("<div class='card-header'><span>🧾</span><div class='card-title'>Formulário de refinamento</div></div>", unsafe_allow_html=True)
     st.markdown(
-        "<div style='color:var(--muted);'>Todas as perguntas aparecem aqui para preparar a análise com IA.</div>",
+        "<div class='card-subtitle'>Organize as respostas em cards elegantes antes de iniciar a IA.</div>",
         unsafe_allow_html=True,
     )
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1231,13 +1388,15 @@ if page == "refinement":
         st.session_state.user_context = user_context
         st.session_state.context_ready = form_complete
 
-        col_nav1, col_nav2 = st.columns([1, 1])
-        with col_nav1:
-            if st.button(tr("button_back")):
-                st.session_state.page = "upload"
-        with col_nav2:
-            if st.button("Ir para análise com IA", type="primary"):
-                st.session_state.page = "analysis"
+        st.markdown("<div class='refinement-actions'>", unsafe_allow_html=True)
+        back_clicked = st.button(tr("button_back"), key="refinement_back")
+        go_ai = st.button("Ir para análise com IA", type="primary", key="refinement_next")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if back_clicked:
+            st.session_state.page = "upload"
+        if go_ai:
+            st.session_state.page = "analysis"
 
 
 # ------------------------------------------------------------
