@@ -1,8 +1,10 @@
 import io
 import json
+import math
 import re
 from typing import Iterable
 
+import altair as alt
 import pandas as pd
 import pdfplumber
 import streamlit as st
@@ -12,7 +14,7 @@ from openai import OpenAI
 try:
     OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 except KeyError:
-    st.error("OPENAI_API_KEY was not found in Streamlit secrets.")
+    st.error(tr("api_key_missing"))
     st.stop()
 
 st.set_page_config(
@@ -20,6 +22,105 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+TRANSLATIONS = {
+    "pt": {
+        "app_title_main": "Assistente de Bookkeeping com IA",
+        "app_subtitle_main": "Envie seu extrato, veja um resumo rápido e gere relatórios completos com IA.",
+        "upload_section_title": "Upload do extrato",
+        "upload_help": "Envie arquivos PDF, CSV, XLSX, TXT, OFX, QFX ou QBO com suas transações bancárias.",
+        "summary_entries": "Total de entradas",
+        "summary_exits": "Total de saídas",
+        "summary_count": "Número de transações",
+        "button_view_details": "Ver detalhes com IA & exportar",
+        "details_title": "Detalhes com IA & Exportação de Bookkeeping",
+        "details_subtitle": "Classificação automática, relatórios e arquivos prontos para Zoho Books e QuickBooks.",
+        "no_file_info": "Nenhum extrato carregado ainda. Volte para a página principal e envie um arquivo.",
+        "button_back": "⬅️ Voltar",
+        "ai_running": "Rodando análise de IA...",
+        "ai_done": "IA concluída! Confira o relatório abaixo.",
+        "ai_failed": "Falha na classificação com IA",
+        "ai_retry": "Tentar novamente",
+        "ai_overview_title": "Visão financeira com IA",
+        "chart_expenses_by_category": "Despesas por categoria",
+        "chart_income_by_category": "Entradas por categoria",
+        "chart_balance_evolution": "Evolução do saldo",
+        "table_full_ai": "Tabela completa com IA",
+        "export_section_title": "Exportar",
+        "download_zoho": "Download arquivo Zoho Books",
+        "download_qb": "Download QuickBooks Transactions CSV",
+        "download_vendors": "Download Vendors list (CSV)",
+        "ai_only_first_2000": "Apenas as primeiras 2000 transações foram processadas pela IA.",
+        "file_processed_but_empty": "Arquivo processado, mas nenhuma transação foi identificada.",
+        "upload_first_info": "Faça o upload do extrato para ver o resumo.",
+        "theme_label": "Tema",
+        "theme_light": "Claro",
+        "theme_dark": "Escuro",
+        "ai_progress_title": "Analisando transações com IA...",
+        "ai_progress_estimate": "Estimativa de tempo: ~{seconds} segundos para {count} transações.",
+        "ai_progress_batches": "Processando lote {current}/{total}...",
+        "app_abbr": "Assistente IA",
+        "upload_info": "A análise com IA será executada apenas ao avançar para os detalhes.",
+        "upload_error": "❌ Erro ao processar o arquivo: {error}",
+        "quota_error": "Limite de uso da API atingido. Verifique o faturamento do OpenAI ou utilize uma chave com créditos disponíveis.",
+        "generic_error": "Falha ao chamar a API do OpenAI. Confira se a chave está correta e tente novamente.",
+        "no_expenses": "Sem despesas para exibir.",
+        "no_income": "Sem entradas para exibir.",
+        "api_key_missing": "OPENAI_API_KEY não encontrado nas secrets do Streamlit.",
+    },
+    "en": {
+        "app_title_main": "AI Bookkeeping Assistant",
+        "app_subtitle_main": "Upload your statement, see a quick summary and generate full AI-powered reports.",
+        "upload_section_title": "Upload statement",
+        "upload_help": "Upload PDF, CSV, XLSX, TXT, OFX, QFX or QBO bank statement files.",
+        "summary_entries": "Total inflows",
+        "summary_exits": "Total outflows",
+        "summary_count": "Number of transactions",
+        "button_view_details": "View AI details & bookkeeping export",
+        "details_title": "AI Details & Bookkeeping Export",
+        "details_subtitle": "Automatic classification, reports and ready-to-import files for Zoho Books and QuickBooks.",
+        "no_file_info": "No statement loaded yet. Go back to the main page and upload a file.",
+        "button_back": "⬅️ Back",
+        "ai_running": "Running AI analysis...",
+        "ai_done": "AI completed! Check the report below.",
+        "ai_failed": "AI classification failed",
+        "ai_retry": "Try again",
+        "ai_overview_title": "AI Financial Overview",
+        "chart_expenses_by_category": "Expenses by category",
+        "chart_income_by_category": "Income by category",
+        "chart_balance_evolution": "Balance evolution",
+        "table_full_ai": "Full AI-enriched table",
+        "export_section_title": "Export",
+        "download_zoho": "Download Zoho Books file",
+        "download_qb": "Download QuickBooks Transactions CSV",
+        "download_vendors": "Download Vendors list (CSV)",
+        "ai_only_first_2000": "Only the first 2000 transactions were processed by AI.",
+        "file_processed_but_empty": "File processed, but no transactions were found.",
+        "upload_first_info": "Upload a statement to see the summary.",
+        "theme_label": "Theme",
+        "theme_light": "Light",
+        "theme_dark": "Dark",
+        "ai_progress_title": "Analyzing transactions with AI...",
+        "ai_progress_estimate": "Estimated time: ~{seconds} seconds for {count} transactions.",
+        "ai_progress_batches": "Processing batch {current}/{total}...",
+        "app_abbr": "AI Assistant",
+        "upload_info": "AI analysis will run only after moving to details.",
+        "upload_error": "❌ Error processing the file: {error}",
+        "quota_error": "API usage limit reached. Check OpenAI billing or use a key with available credits.",
+        "generic_error": "Failed to call the OpenAI API. Confirm the key is correct and try again.",
+        "no_expenses": "No expenses to display.",
+        "no_income": "No income to display.",
+        "api_key_missing": "OPENAI_API_KEY not found in Streamlit secrets.",
+    },
+}
+
+
+def tr(key: str, **kwargs) -> str:
+    lang = st.session_state.get("lang", "pt")
+    text = TRANSLATIONS.get(lang, {}).get(key, key)
+    if kwargs:
+        return text.format(**kwargs)
+    return text
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -138,6 +239,57 @@ def format_currency(value: float) -> str:
     return f"${value:,.2f}"
 
 
+def apply_theme_css(theme: str):
+    if theme == "dark":
+        style = """
+        <style>
+        body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+            background-color: #111;
+            color: #f5f5f5;
+        }
+        [data-testid="stSidebar"], .stApp header {
+            background-color: #121212;
+            color: #f5f5f5;
+        }
+        .block-container {
+            padding-top: 0.5rem;
+        }
+        .stMetric, .stDataFrame, .stAltairChart, .stMarkdown, .stButton, .stDownloadButton {
+            background-color: #1f1f1f !important;
+            color: #f5f5f5 !important;
+            border-radius: 8px;
+            border: 1px solid #2a2a2a;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        </style>
+        """
+    else:
+        style = """
+        <style>
+        body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+            background-color: #ffffff;
+            color: #1c1c1c;
+        }
+        [data-testid="stSidebar"], .stApp header {
+            background-color: #f8f9fa;
+            color: #1c1c1c;
+        }
+        .block-container {
+            padding-top: 0.5rem;
+        }
+        .stMetric, .stDataFrame, .stAltairChart, .stMarkdown, .stButton, .stDownloadButton {
+            background-color: #ffffff !important;
+            color: #1c1c1c !important;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        </style>
+        """
+
+    st.markdown(style, unsafe_allow_html=True)
+
+
 def calculate_summary(df: pd.DataFrame) -> dict:
     total_in = df.loc[df["Amount"] > 0, "Amount"].sum()
     total_out = df.loc[df["Amount"] < 0, "Amount"].sum()
@@ -150,9 +302,9 @@ def calculate_summary(df: pd.DataFrame) -> dict:
 
 def render_metrics(summary: dict):
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total de entradas", format_currency(summary["entries"]))
-    col2.metric("Total de saídas", format_currency(summary["exits"]))
-    col3.metric("Número de transações", f"{summary['count']:,}")
+    col1.metric(tr("summary_entries"), format_currency(summary["entries"]))
+    col2.metric(tr("summary_exits"), format_currency(summary["exits"]))
+    col3.metric(tr("summary_count"), f"{summary['count']:,}")
 
 
 def render_header(title: str, subtitle: str | None = None):
@@ -172,23 +324,20 @@ def chunk_batches(items: Iterable, size: int) -> Iterable[list]:
         yield batch
 
 
-def format_ai_error(error: Exception) -> str:
+def format_ai_error(error: Exception, lang: str) -> str:
     error_text = str(error)
 
     quota_keywords = ["insufficient_quota", "quota", "billing"]
     status_code = getattr(error, "status_code", None)
     if status_code == 429 or any(keyword in error_text for keyword in quota_keywords):
-        return (
-            "Limite de uso da API atingido. Verifique o faturamento do OpenAI "
-            "ou utilize uma chave com créditos disponíveis."
-        )
+        return TRANSLATIONS.get(lang, TRANSLATIONS["pt"]).get("quota_error")
 
-    return (
-        "Falha ao chamar a API do OpenAI. Confira se a chave está correta e tente novamente."
-    )
+    return TRANSLATIONS.get(lang, TRANSLATIONS["pt"]).get("generic_error")
 
 
-def run_ai_categorization(df: pd.DataFrame) -> pd.DataFrame:
+def run_ai_categorization(
+    df: pd.DataFrame, progress_bar=None, status_placeholder=None
+) -> pd.DataFrame:
     if df.empty:
         return df
 
@@ -204,7 +353,10 @@ You are an expert US bookkeeper. Classify bank transactions for accounting syste
 """
 
     ai_results: list[dict] = []
+    total_batches = math.ceil(len(payload_rows) / 30) if payload_rows else 0
+    current_batch = 0
     for batch in chunk_batches(payload_rows, 30):
+        current_batch += 1
         user_prompt = {
             "role": "user",
             "content": [
@@ -230,7 +382,8 @@ You are an expert US bookkeeper. Classify bank transactions for accounting syste
                 temperature=0.2,
             )
         except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(format_ai_error(exc)) from exc
+            lang = st.session_state.get("lang", "pt")
+            raise RuntimeError(format_ai_error(exc, lang)) from exc
 
         try:
             content = response.choices[0].message.content
@@ -243,6 +396,13 @@ You are an expert US bookkeeper. Classify bank transactions for accounting syste
         for original, enriched in zip(batch, ai_batch):
             merged = {**original, **enriched}
             ai_results.append(merged)
+
+        if progress_bar is not None and total_batches:
+            progress_bar.progress(current_batch / total_batches)
+        if status_placeholder is not None and total_batches:
+            status_placeholder.write(
+                tr("ai_progress_batches", current=current_batch, total=total_batches)
+            )
 
     if not ai_results:
         raise RuntimeError("AI classification returned no results.")
@@ -262,11 +422,20 @@ You are an expert US bookkeeper. Classify bank transactions for accounting syste
     return enriched_df
 
 
-def generate_summary_text(df: pd.DataFrame) -> str:
+def generate_summary_text(df: pd.DataFrame, lang: str | None = None) -> str:
+    lang = lang or st.session_state.get("lang", "pt")
+
     total_in = df.loc[df["Amount"] > 0, "Amount"].sum()
     total_out = df.loc[df["Amount"] < 0, "Amount"].sum()
     net = total_in + total_out
 
+    income_categories = (
+        df[df["Amount"] > 0]
+        .groupby("AI_Category")["Amount"]
+        .sum()
+        .sort_values(ascending=False)
+        .head(5)
+    )
     top_expenses = (
         df[df["Amount"] < 0]
         .groupby("AI_Category")["Amount"]
@@ -283,34 +452,98 @@ def generate_summary_text(df: pd.DataFrame) -> str:
         .head(5)
     )
 
-    lines = [
-        f"**Total inflows:** {format_currency(total_in)}",
-        f"**Total outflows:** {format_currency(total_out)}",
-        f"**Net result:** {format_currency(net)}",
-        "",
-        "**Top expense categories:**",
-    ]
-    if top_expenses.empty:
-        lines.append("- No expenses identified.")
-    else:
-        for cat, val in top_expenses.items():
-            cat_label = cat or "Uncategorized"
-            lines.append(f"- {cat_label}: {format_currency(val)}")
+    if lang == "en":
+        header_lines = [
+            f"**Total inflows:** {format_currency(total_in)}",
+            f"**Total outflows:** {format_currency(total_out)}",
+            f"**Net result:** {format_currency(net)}",
+            "",
+            "**Revenue highlights:**",
+        ]
+        if income_categories.empty:
+            header_lines.append("- No income categories identified.")
+        else:
+            for cat, val in income_categories.items():
+                cat_label = cat or "Uncategorized"
+                header_lines.append(f"- {cat_label}: {format_currency(val)}")
 
-    lines.append("\n**Top vendors by spend:**")
-    if top_vendors.empty:
-        lines.append("- No vendor expenses detected.")
-    else:
-        for vendor, val in top_vendors.items():
-            vendor_label = vendor or "Unknown"
-            lines.append(f"- {vendor_label}: {format_currency(val)}")
+        header_lines.extend([
+            "\n**Top expense categories:**",
+        ])
+        if top_expenses.empty:
+            header_lines.append("- No expenses identified.")
+        else:
+            for cat, val in top_expenses.items():
+                cat_label = cat or "Uncategorized"
+                header_lines.append(f"- {cat_label}: {format_currency(val)}")
 
-    suggestions = [
-        "Review bank fees and recurring subscriptions for possible reductions.",
-        "Consolidate vendor spending to negotiate better rates where feasible.",
-        "Track large cash or transfer outflows to ensure proper documentation.",
-    ]
-    lines.append("\n**Suggestions:**")
+        header_lines.append("\n**Top vendors by spend:**")
+        if top_vendors.empty:
+            header_lines.append("- No vendor expenses detected.")
+        else:
+            for vendor, val in top_vendors.items():
+                vendor_label = vendor or "Unknown"
+                header_lines.append(f"- {vendor_label}: {format_currency(val)}")
+
+        suggestions = [
+            "Diversify revenue sources to avoid dependence on a few customers.",
+            "Strengthen recurring revenue streams through renewals or long-term contracts.",
+            "Review bank fees and recurring subscriptions for possible reductions.",
+            "Consolidate vendor spending to negotiate better rates where feasible.",
+            "Track large cash or transfer outflows to ensure proper documentation.",
+        ]
+        result_comment = (
+            f"The business reported a net result of {format_currency(net)}, "
+            "highlighting overall cash position for the analyzed period."
+        )
+        suggestions_title = "**Suggestions:**"
+    else:
+        header_lines = [
+            f"**Total de entradas:** {format_currency(total_in)}",
+            f"**Total de saídas:** {format_currency(total_out)}",
+            f"**Resultado líquido:** {format_currency(net)}",
+            "",
+            "**Destaques de receita:**",
+        ]
+        if income_categories.empty:
+            header_lines.append("- Nenhuma categoria de receita identificada.")
+        else:
+            for cat, val in income_categories.items():
+                cat_label = cat or "Sem categoria"
+                header_lines.append(f"- {cat_label}: {format_currency(val)}")
+
+        header_lines.extend([
+            "\n**Principais categorias de despesa:**",
+        ])
+        if top_expenses.empty:
+            header_lines.append("- Nenhuma despesa identificada.")
+        else:
+            for cat, val in top_expenses.items():
+                cat_label = cat or "Sem categoria"
+                header_lines.append(f"- {cat_label}: {format_currency(val)}")
+
+        header_lines.append("\n**Top fornecedores por gasto:**")
+        if top_vendors.empty:
+            header_lines.append("- Nenhuma despesa por fornecedor detectada.")
+        else:
+            for vendor, val in top_vendors.items():
+                vendor_label = vendor or "Desconhecido"
+                header_lines.append(f"- {vendor_label}: {format_currency(val)}")
+
+        suggestions = [
+            "Avalie a concentração de receitas em poucos clientes e diversifique quando possível.",
+            "Reforce contratos recorrentes para manter a previsibilidade de entradas.",
+            "Revise tarifas bancárias e assinaturas recorrentes para possíveis reduções.",
+            "Consolide gastos com fornecedores para negociar melhores condições.",
+            "Monitore saídas em dinheiro ou transferências para garantir documentação adequada.",
+        ]
+        result_comment = (
+            f"A empresa apresentou um resultado líquido de {format_currency(net)}, "
+            "refletindo a posição de caixa do período analisado."
+        )
+        suggestions_title = "**Sugestões:**"
+
+    lines = header_lines + ["", f"**{result_comment}**", "", suggestions_title]
     for tip in suggestions:
         lines.append(f"- {tip}")
 
@@ -354,6 +587,12 @@ def prepare_downloads(df: pd.DataFrame) -> tuple[str, str, str]:
     )
 
 
+if "lang" not in st.session_state:
+    st.session_state.lang = "pt"
+
+if "theme" not in st.session_state:
+    st.session_state.theme = "light"
+
 if "page" not in st.session_state:
     st.session_state.page = "main"
 
@@ -363,6 +602,40 @@ if "ai_processed" not in st.session_state:
 if "ai_error" not in st.session_state:
     st.session_state.ai_error = None
 
+current_lang = st.session_state.get("lang", "pt")
+current_theme = st.session_state.get("theme", "light")
+
+top_bar = st.container()
+with top_bar:
+    col_app, col_lang, col_theme = st.columns([1, 2, 2])
+    col_app.markdown(
+        f"<div style='font-size:14px;font-weight:600;opacity:0.8;'>{tr('app_abbr')}</div>",
+        unsafe_allow_html=True,
+    )
+
+    lang_selection = col_lang.radio(
+        "",
+        options=["pt", "en"],
+        format_func=lambda x: "Português" if x == "pt" else "English",
+        index=0 if current_lang == "pt" else 1,
+        horizontal=True,
+        key="lang_selector",
+    )
+    if lang_selection != current_lang:
+        st.session_state.lang = lang_selection
+        st.rerun()
+
+    theme_choice = col_theme.radio(
+        tr("theme_label"),
+        [tr("theme_light"), tr("theme_dark")],
+        horizontal=True,
+        index=0 if current_theme == "light" else 1,
+        key="theme_selector",
+    )
+    st.session_state.theme = "light" if theme_choice == tr("theme_light") else "dark"
+
+apply_theme_css(st.session_state.theme)
+
 page = st.session_state.page
 
 
@@ -370,23 +643,21 @@ page = st.session_state.page
 # Page: Summary (upload + metrics)
 # ------------------------------------------------------------
 if page == "main":
-    render_header(
-        "AI Bookkeeping Assistant",
-        "Envie seu extrato, veja um resumo rápido e gere relatórios completos ao acionar a IA.",
-    )
+    render_header(tr("app_title_main"), tr("app_subtitle_main"))
 
-    st.subheader("Upload do extrato")
+    st.markdown("---")
+    st.subheader(tr("upload_section_title"))
     uploaded = st.file_uploader(
-        "Envie arquivos PDF, CSV, XLSX, TXT, OFX, QFX ou QBO",
+        tr("upload_help"),
         type=["pdf", "csv", "xlsx", "txt", "ofx", "qfx", "qbo"],
-        help="Aceitamos arquivos comuns de extratos bancários.",
+        help=tr("upload_help"),
     )
 
     if uploaded:
         try:
             df = normalize_transactions(parse_file(uploaded))
             if df.empty:
-                st.warning("⚠️ Arquivo processado, mas nenhuma transação foi identificada.")
+                st.warning(tr("file_processed_but_empty"))
             else:
                 df = df.dropna(axis=1, how="all")
                 st.session_state.df = df
@@ -394,94 +665,149 @@ if page == "main":
                 st.session_state.ai_error = None
 
                 summary = calculate_summary(df)
-                render_metrics(summary)
+                with st.container():
+                    render_metrics(summary)
 
-                st.info("A análise com IA será executada apenas ao avançar para os detalhes.")
+                st.info(tr("upload_info"))
 
-                if st.button("View AI Details & Bookkeeping Export", type="primary"):
+                st.write("")
+                if st.button(tr("button_view_details"), type="primary"):
                     st.session_state.page = "details"
 
         except Exception as exc:  # noqa: BLE001
-            st.error(f"❌ Erro ao processar o arquivo: {exc}")
+            st.error(tr("upload_error", error=exc))
     else:
-        st.info("Faça o upload do extrato para ver o resumo.")
+        st.info(tr("upload_first_info"))
 
 
 # ------------------------------------------------------------
 # Page: Details (AI analysis + exports)
 # ------------------------------------------------------------
 if page == "details":
-    render_header(
-        "📄 AI Details & Bookkeeping Export",
-        "Classificação automática, relatórios e arquivos prontos para Zoho Books e QuickBooks.",
-    )
+    render_header(tr("details_title"), tr("details_subtitle"))
 
     df = st.session_state.get("df")
     if df is None or df.empty:
-        st.info("Nenhum extrato carregado ainda. Volte para a página de Resumo e envie um arquivo.")
-        if st.button("⬅️ Voltar"):
+        st.info(tr("no_file_info"))
+        if st.button(tr("button_back")):
             st.session_state.page = "main"
     else:
         if not st.session_state.ai_processed:
+            count = min(len(df), 2000)
+            batch_size = 30
+            total_batches = math.ceil(count / batch_size)
+            estimated_seconds = total_batches * 2
+
+            st.markdown("### " + tr("ai_progress_title"))
+            st.markdown(tr("ai_progress_estimate", seconds=estimated_seconds, count=count))
+            progress_bar = st.progress(0)
+            status_placeholder = st.empty()
+
             try:
-                with st.spinner("Running AI analysis..."):
-                    ai_df = run_ai_categorization(df)
-                    st.session_state.df_ai = ai_df
-                    st.session_state.ai_processed = True
-                    st.session_state.ai_error = None
+                ai_df = run_ai_categorization(
+                    df, progress_bar=progress_bar, status_placeholder=status_placeholder
+                )
+                progress_bar.progress(1.0)
+                status_placeholder.write(tr("ai_done"))
+                st.session_state.df_ai = ai_df
+                st.session_state.ai_processed = True
+                st.session_state.ai_error = None
             except Exception as exc:  # noqa: BLE001
+                if "progress_bar" in locals():
+                    progress_bar.empty()
+                if "status_placeholder" in locals():
+                    status_placeholder.empty()
                 st.session_state.ai_error = str(exc)
                 st.session_state.ai_processed = False
 
         if st.session_state.ai_error:
-            st.error(f"Falha na classificação com IA: {st.session_state.ai_error}")
-            if st.button("Tentar novamente"):
+            st.error(f"{tr('ai_failed')}: {st.session_state.ai_error}")
+            if st.button(tr("ai_retry")):
                 st.session_state.ai_processed = False
                 st.session_state.ai_error = None
                 st.rerun()
         elif st.session_state.ai_processed:
             ai_df = st.session_state.df_ai
-            st.success("IA concluída! Confira o relatório abaixo.")
+            st.success(tr("ai_done"))
 
-            st.markdown("## AI Financial Overview")
-            st.markdown(generate_summary_text(ai_df))
+            st.divider()
+            st.markdown("## " + tr("ai_overview_title"))
+            st.markdown(generate_summary_text(ai_df, lang=st.session_state.get("lang", "pt")))
 
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("### Despesas por categoria")
-                expense_data = (
-                    ai_df[ai_df["Amount"] < 0]
-                    .groupby("AI_Category")["Amount"]
-                    .sum()
-                    .sort_values()
-                )
-                if not expense_data.empty:
-                    st.bar_chart(expense_data)
-                else:
-                    st.info("Sem despesas para exibir.")
+            st.divider()
+            charts_container = st.container()
+            with charts_container:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("### " + tr("chart_expenses_by_category"))
+                    expense_data = (
+                        ai_df[ai_df["Amount"] < 0]
+                        .groupby("AI_Category")["Amount"]
+                        .sum()
+                        .abs()
+                        .sort_values(ascending=False)
+                    )
+                    if not expense_data.empty:
+                        expense_chart = (
+                            alt.Chart(expense_data.reset_index())
+                            .mark_bar()
+                            .encode(
+                                x=alt.X("Amount:Q", title=tr("summary_exits")),
+                                y=alt.Y("AI_Category:N", sort="-x", title="AI_Category"),
+                                color=alt.Color("Amount:Q", scheme="redblue", legend=None),
+                            )
+                            .properties(height=400)
+                        )
+                        st.altair_chart(expense_chart, use_container_width=True)
+                    else:
+                        st.info(tr("no_expenses"))
 
-            with col2:
-                st.markdown("### Entradas por categoria")
-                income_data = (
-                    ai_df[ai_df["Amount"] > 0]
-                    .groupby("AI_Category")["Amount"]
-                    .sum()
-                    .sort_values(ascending=False)
-                )
-                if not income_data.empty:
-                    st.bar_chart(income_data)
-                else:
-                    st.info("Sem entradas para exibir.")
+                with col2:
+                    st.markdown("### " + tr("chart_income_by_category"))
+                    income_data = (
+                        ai_df[ai_df["Amount"] > 0]
+                        .groupby("AI_Category")["Amount"]
+                        .sum()
+                        .sort_values(ascending=False)
+                    )
+                    if not income_data.empty:
+                        income_chart = (
+                            alt.Chart(income_data.reset_index())
+                            .mark_bar()
+                            .encode(
+                                x=alt.X("AI_Category:N", sort="-y", title="AI_Category"),
+                                y=alt.Y("Amount:Q", title=tr("summary_entries")),
+                                color=alt.Color("Amount:Q", scheme="blues", legend=None),
+                            )
+                            .properties(height=400)
+                        )
+                        st.altair_chart(income_chart, use_container_width=True)
+                    else:
+                        st.info(tr("no_income"))
 
-            st.markdown("### Evolução do saldo")
+            st.markdown("### " + tr("chart_balance_evolution"))
             balance_df = ai_df.copy()
             balance_df["Date"] = pd.to_datetime(balance_df["Date"], errors="coerce")
             balance_df = balance_df.sort_values("Date")
             balance_df["Running Balance"] = balance_df["Amount"].cumsum()
-            st.line_chart(balance_df.set_index("Date")["Running Balance"])
+            balance_chart = (
+                alt.Chart(balance_df)
+                .mark_line(point=True, interpolate="monotone")
+                .encode(
+                    x=alt.X("Date:T", title="Date"),
+                    y=alt.Y(
+                        "Running Balance:Q",
+                        title="Running Balance",
+                        scale=alt.Scale(zero=False),
+                    ),
+                )
+                .interactive()
+                .properties(height=400)
+            )
+            st.altair_chart(balance_chart, use_container_width=True)
 
             st.markdown("---")
-            st.markdown("### Tabela completa com IA")
+            st.markdown("### " + tr("table_full_ai"))
             st.dataframe(
                 ai_df[
                     [
@@ -500,32 +826,32 @@ if page == "details":
             )
 
             st.markdown("---")
-            st.markdown("## Exportar")
+            st.markdown("## " + tr("export_section_title"))
             zoho_csv, qb_csv, vendors_csv = prepare_downloads(ai_df)
 
             colz, colq, colv = st.columns(3)
             colz.download_button(
-                "Download Zoho Books file",
+                tr("download_zoho"),
                 data=zoho_csv,
                 file_name="zoho_books_transactions.csv",
                 mime="text/csv",
             )
             colq.download_button(
-                "Download QuickBooks Transactions CSV",
+                tr("download_qb"),
                 data=qb_csv,
                 file_name="quickbooks_transactions.csv",
                 mime="text/csv",
             )
             colv.download_button(
-                "Download Vendors list (CSV)",
+                tr("download_vendors"),
                 data=vendors_csv,
                 file_name="vendors.csv",
                 mime="text/csv",
             )
 
             if len(df) > 2000:
-                st.warning("Apenas as primeiras 2000 transações foram processadas pela IA.")
+                st.warning(tr("ai_only_first_2000"))
 
-        if st.button("⬅️ Voltar"):
+        if st.button(tr("button_back")):
             st.session_state.page = "main"
 
