@@ -4,9 +4,9 @@ import math
 import re
 from typing import Iterable
 
-import altair as alt
 import pandas as pd
 import pdfplumber
+import plotly.express as px
 import streamlit as st
 from openai import OpenAI
 
@@ -443,6 +443,104 @@ def format_ai_error(error: Exception, lang: str) -> str:
     return TRANSLATIONS.get(lang, TRANSLATIONS["pt"]).get("generic_error")
 
 
+def infer_business_type(df: pd.DataFrame) -> str:
+    text_blob = " ".join(
+        df.get("Description", pd.Series(dtype=str)).fillna("").astype(str).str.lower().tolist()
+    )
+    vendor_blob = " ".join(df.get("AI_Vendor", pd.Series(dtype=str)).fillna("").astype(str).str.lower().tolist())
+    signals = text_blob + " " + vendor_blob
+    mapping = {
+        "home depot": "Construction",
+        "lowe": "Construction",
+        "rk miles": "Construction",
+        "dumpster": "Construction",
+        "waste": "Construction",
+        "hvac": "HVAC",
+        "plumbing": "Construction",
+        "auto": "Auto Repair",
+        "fleet": "Trucking",
+        "trucking": "Trucking",
+        "fuel": "Trucking",
+        "lawn": "Landscaping",
+        "landscap": "Landscaping",
+        "clean": "Cleaning",
+        "janitorial": "Cleaning",
+        "marketing": "Services",
+        "consult": "Professional Services",
+    }
+    for keyword, industry in mapping.items():
+        if keyword in signals:
+            return industry
+    return "General Business"
+
+
+def validate_ai_results(enriched_df: pd.DataFrame) -> pd.DataFrame:
+    df = enriched_df.copy()
+    business_type = infer_business_type(df)
+
+    vendor_rules = [
+        {"keywords": ["autozone"], "category": "Auto Parts & Vehicle Maintenance", "account": "Vehicle Repairs"},
+        {"keywords": ["gulf", "mobil", "circle k", "shell", "chevron", "bp"], "category": "Fuel", "account": "Fuel"},
+        {
+            "keywords": ["home depot", "lowe", "rk miles", "menards"],
+            "category": "Building Materials / Construction Supplies",
+            "account": "Materials",
+        },
+        {"keywords": ["star waste", "waste", "dumpster"], "category": "Waste Removal / Dumpster Fees", "account": "Waste Removal"},
+        {"keywords": ["fleetio"], "category": "Fleet Management Software", "account": "Software Subscriptions"},
+        {"keywords": ["connecteam"], "category": "Employee Management Software", "account": "Software Subscriptions"},
+        {"keywords": ["thumbtack"], "category": "Advertising & Marketing", "account": "Advertising"},
+    ]
+
+    for idx, row in df.iterrows():
+        desc = str(row.get("Description") or "").lower()
+        vendor = str(row.get("AI_Vendor") or "").lower()
+        notes = str(row.get("AI_Notes") or "").strip()
+        amount = row.get("Amount")
+
+        if pd.notna(amount):
+            if amount > 0 and row.get("AI_Transaction_Type") not in {"Inflow", "Transfer"}:
+                df.at[idx, "AI_Transaction_Type"] = "Inflow"
+                notes += " | Validation: adjusted to inflow based on positive amount."
+            elif amount < 0 and row.get("AI_Transaction_Type") not in {"Outflow", "Transfer"}:
+                df.at[idx, "AI_Transaction_Type"] = "Outflow"
+                notes += " | Validation: adjusted to outflow based on negative amount."
+
+        for rule in vendor_rules:
+            if any(keyword in vendor or keyword in desc for keyword in rule["keywords"]):
+                if row.get("AI_Category") != rule["category"]:
+                    df.at[idx, "AI_Category"] = rule["category"]
+                    df.at[idx, "AI_Account_Name"] = rule["account"]
+                    notes += f" | Validation: vendor matched {rule['category']} guidance."
+
+        if "amazon" in vendor and not row.get("AI_Category"):
+            df.at[idx, "AI_Category"] = "Office Supplies"
+            df.at[idx, "AI_Account_Name"] = "Office Supplies"
+            notes += " | Validation: Amazon purchase defaulted to office supplies; refine if details available."
+
+        large_txn = pd.notna(amount) and abs(amount) >= 5000
+        if large_txn and not row.get("AI_Category"):
+            if amount > 0:
+                df.at[idx, "AI_Category"] = "Owner Contribution"
+                df.at[idx, "AI_Account_Name"] = "Owner Equity"
+                notes += " | Validation: large inflow tagged as potential owner contribution."
+            else:
+                fallback = "Materials" if business_type in {"Construction", "HVAC", "Landscaping"} else "Contractors"
+                df.at[idx, "AI_Category"] = fallback
+                df.at[idx, "AI_Account_Name"] = fallback
+                notes += " | Validation: large outflow aligned with core operations."
+
+        if business_type == "Construction" and row.get("AI_Category") == "Fuel" and "autozone" in vendor:
+            df.at[idx, "AI_Category"] = "Auto Parts & Vehicle Maintenance"
+            df.at[idx, "AI_Account_Name"] = "Vehicle Repairs"
+            notes += " | Validation: AutoZone should be vehicle maintenance, not fuel."
+
+        df.at[idx, "AI_Notes"] = notes.strip(" |")
+
+    df["AI_Business_Type"] = business_type
+    return df
+
+
 def run_ai_categorization(
     df: pd.DataFrame, progress_bar=None, status_placeholder=None
 ) -> pd.DataFrame:
@@ -457,7 +555,57 @@ def run_ai_categorization(
     payload_rows = working_df.to_dict(orient="records")
 
     system_prompt = """
-You are an expert US bookkeeper. Classify bank transactions for accounting systems (Zoho Books, QuickBooks). Infer business type from patterns in the data and choose appropriate expense/income accounts. For each transaction, return the fields: AI_Category, AI_Transaction_Type (Inflow, Outflow, Transfer), AI_Vendor, AI_Customer, AI_Account_Name, AI_Notes. Keep values concise and professional. Use Income/expense terminology, and align categories with typical US accounting.
+You are a senior U.S. accountant and forensic bookkeeper with expertise in classifying financial transactions for businesses across all industries. Your job is to classify each transaction with extremely high accuracy.
+
+You MUST:
+1. Read each transaction holistically: description, vendor name, amount, patterns, frequency.
+2. Infer the type of business (construction, cleaning, trucking, auto repair, HVAC, landscaping, retail, services, professional consulting, etc.) by analyzing:
+   - Vendors
+   - Spending categories
+   - Tools or materials purchased
+   - Fuel patterns
+   - Payroll patterns
+   - Home Depot / Lowe’s usage
+   - Commercial waste services
+   - Thumbtack ads
+   - Vehicle maintenance or rental
+   - Office expenses
+
+3. Assign categories CONSISTENT with U.S. GAAP, IRS guidelines, and standard chart of accounts used by:
+   - QuickBooks Online
+   - Zoho Books
+
+4. Vendor intelligence:
+   - AutoZone = Auto Parts & Vehicle Maintenance (NEVER fuel)
+   - Gulf, Mobil, Circle K, Shell = Fuel / Gasoline
+   - Home Depot, Lowe’s, RK Miles = Building Materials / Construction Supplies
+   - Star Waste Systems = Waste Removal / Dumpster Fees
+   - Fleetio = Fleet Management Software
+   - Connecteam = Employee management / workforce software
+   - Thumbtack = Advertising & Marketing
+   - Amazon = Inspect context to determine category: tools, electronics, materials, office supplies, etc.
+
+5. For each transaction, return:
+   - AI_Category
+   - AI_Transaction_Type (Inflow, Outflow, Transfer)
+   - AI_Vendor (normalized vendor name)
+   - AI_Customer (if applicable)
+   - AI_Account_Name (specific accounting account)
+   - AI_Notes (short explanation of why it was classified this way)
+
+6. NEVER guess randomly. If information is incomplete, infer using:
+   - Vendor database context
+   - U.S. business logic
+   - Industry patterns
+   - Similar transactions
+   - Description keywords
+   - Historical patterns in the file
+
+7. Match inflows with probable revenue sources:
+   - Zelle from individuals = revenue, loan repayment, or owner contribution depending on pattern
+   - ACH deposits = revenue unless clearly payroll or transfer
+
+8. Output must be JSON only with no extra commentary.
 """
 
     ai_results: list[dict] = []
@@ -527,7 +675,8 @@ You are an expert US bookkeeper. Classify bank transactions for accounting syste
         if col not in enriched_df.columns:
             enriched_df[col] = None
 
-    return enriched_df
+    validated_df = validate_ai_results(enriched_df)
+    return validated_df
 
 
 def generate_summary_text(df: pd.DataFrame, lang: str | None = None) -> str:
@@ -537,123 +686,140 @@ def generate_summary_text(df: pd.DataFrame, lang: str | None = None) -> str:
     total_out = df.loc[df["Amount"] < 0, "Amount"].sum()
     net = total_in + total_out
 
+    income_df = df[df["Amount"] > 0].copy()
+    expense_df = df[df["Amount"] < 0].copy()
+
     income_categories = (
-        df[df["Amount"] > 0]
-        .groupby("AI_Category")["Amount"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(5)
+        income_df.groupby("AI_Category")["Amount"].sum().sort_values(ascending=False).head(5)
     )
-    top_expenses = (
-        df[df["Amount"] < 0]
-        .groupby("AI_Category")["Amount"]
-        .sum()
-        .sort_values()
-        .head(5)
+    top_customers = (
+        income_df.groupby("AI_Customer")["Amount"].sum().dropna().sort_values(ascending=False).head(5)
     )
+    repeated_payers = income_df["AI_Customer"].dropna().value_counts().head(5)
+    top_expenses = expense_df.groupby("AI_Category")["Amount"].sum().sort_values().head(5)
     top_vendors = (
-        df[df["Amount"] < 0]
-        .groupby("AI_Vendor")["Amount"]
-        .sum()
-        .dropna()
-        .sort_values()
-        .head(5)
+        expense_df.groupby("AI_Vendor")["Amount"].sum().dropna().sort_values().head(5)
     )
+
+    business_type = df.get("AI_Business_Type")
+    business_label = business_type.iloc[0] if isinstance(business_type, pd.Series) and not business_type.empty else "General"
 
     if lang == "en":
-        header_lines = [
-            f"**Total inflows:** {format_currency(total_in)}",
-            f"**Total outflows:** {format_currency(total_out)}",
-            f"**Net result:** {format_currency(net)}",
-            "",
-            "**Revenue highlights:**",
-        ]
+        lines = ["### Financial Overview", ""]
+        lines.append(f"**Total inflows:** {format_currency(total_in)}")
+        lines.append(f"**Total outflows:** {format_currency(total_out)}")
+        lines.append(f"**Net result:** {format_currency(net)}")
+        lines.append(f"**Detected business type:** {business_label}")
+        lines.append("\n### Income insights")
         if income_categories.empty:
-            header_lines.append("- No income categories identified.")
+            lines.append("- No income categories identified.")
         else:
             for cat, val in income_categories.items():
-                cat_label = cat or "Uncategorized"
-                header_lines.append(f"- {cat_label}: {format_currency(val)}")
+                lines.append(f"- {cat or 'Uncategorized'}: {format_currency(val)}")
 
-        header_lines.extend([
-            "\n**Top expense categories:**",
-        ])
+        lines.append("\n### Key customers / sources")
+        if top_customers.empty:
+            lines.append("- No customers detected in inflows.")
+        else:
+            for cust, val in top_customers.items():
+                label = cust or "Unspecified"
+                lines.append(f"- {label}: {format_currency(val)}")
+
+        if not repeated_payers.empty:
+            lines.append("\n**Recurring payers:** " + ", ".join([f"{idx} ({count}x)" for idx, count in repeated_payers.items() if pd.notna(idx)]))
+
+        lines.append("\n### Expense insights")
         if top_expenses.empty:
-            header_lines.append("- No expenses identified.")
+            lines.append("- No expenses identified.")
         else:
             for cat, val in top_expenses.items():
-                cat_label = cat or "Uncategorized"
-                header_lines.append(f"- {cat_label}: {format_currency(val)}")
+                lines.append(f"- {cat or 'Uncategorized'}: {format_currency(val)}")
 
-        header_lines.append("\n**Top vendors by spend:**")
+        lines.append("\n**Top vendors by spend:**")
         if top_vendors.empty:
-            header_lines.append("- No vendor expenses detected.")
+            lines.append("- No vendor expenses detected.")
         else:
             for vendor, val in top_vendors.items():
-                vendor_label = vendor or "Unknown"
-                header_lines.append(f"- {vendor_label}: {format_currency(val)}")
+                lines.append(f"- {vendor or 'Unknown'}: {format_currency(val)}")
+
+        result_comment = f"Net result of {format_currency(net)} suggests {'healthy cash generation' if net > 0 else 'cash pressure'}."
+        lines.append("\n### Interpretation")
+        lines.append(f"- {result_comment}")
+        lines.append("- Large deposits may represent revenue, owner contributions, or loan repayments depending on payer patterns.")
 
         suggestions = [
-            "Diversify revenue sources to avoid dependence on a few customers.",
-            "Strengthen recurring revenue streams through renewals or long-term contracts.",
-            "Review bank fees and recurring subscriptions for possible reductions.",
-            "Consolidate vendor spending to negotiate better rates where feasible.",
-            "Track large cash or transfer outflows to ensure proper documentation.",
+            "Align revenue recognition with recurring payer patterns to improve forecasting.",
+            "Review high spend vendors for contract renegotiation and alignment with business type.",
+            "Tag owner contributions and loan repayments distinctly to keep equity and liabilities clean.",
         ]
-        result_comment = (
-            f"The business reported a net result of {format_currency(net)}, "
-            "highlighting overall cash position for the analyzed period."
-        )
-        suggestions_title = "**Suggestions:**"
+        if business_label in {"Construction", "HVAC", "Landscaping"}:
+            suggestions.append("Track materials vs. subcontractors separately to protect gross margin.")
+        elif business_label in {"Cleaning", "Professional Services"}:
+            suggestions.append("Separate labor, supplies, and advertising to monitor client acquisition costs.")
+        else:
+            suggestions.append("Maintain clear segregation between operating expenses and discretionary spending.")
+
+        lines.append("\n### Suggestions")
+        for tip in suggestions:
+            lines.append(f"- {tip}")
     else:
-        header_lines = [
-            f"**Total de entradas:** {format_currency(total_in)}",
-            f"**Total de saídas:** {format_currency(total_out)}",
-            f"**Resultado líquido:** {format_currency(net)}",
-            "",
-            "**Destaques de receita:**",
-        ]
+        lines = ["### Visão financeira", ""]
+        lines.append(f"**Total de entradas:** {format_currency(total_in)}")
+        lines.append(f"**Total de saídas:** {format_currency(total_out)}")
+        lines.append(f"**Resultado líquido:** {format_currency(net)}")
+        lines.append(f"**Tipo de negócio identificado:** {business_label}")
+        lines.append("\n### Entradas")
         if income_categories.empty:
-            header_lines.append("- Nenhuma categoria de receita identificada.")
+            lines.append("- Nenhuma categoria de receita identificada.")
         else:
             for cat, val in income_categories.items():
-                cat_label = cat or "Sem categoria"
-                header_lines.append(f"- {cat_label}: {format_currency(val)}")
+                lines.append(f"- {cat or 'Sem categoria'}: {format_currency(val)}")
 
-        header_lines.extend([
-            "\n**Principais categorias de despesa:**",
-        ])
+        lines.append("\n### Principais clientes / origem")
+        if top_customers.empty:
+            lines.append("- Nenhum cliente detectado nas entradas.")
+        else:
+            for cust, val in top_customers.items():
+                label = cust or "Não informado"
+                lines.append(f"- {label}: {format_currency(val)}")
+
+        if not repeated_payers.empty:
+            lines.append("\n**Pagadores recorrentes:** " + ", ".join([f"{idx} ({count}x)" for idx, count in repeated_payers.items() if pd.notna(idx)]))
+
+        lines.append("\n### Despesas")
         if top_expenses.empty:
-            header_lines.append("- Nenhuma despesa identificada.")
+            lines.append("- Nenhuma despesa identificada.")
         else:
             for cat, val in top_expenses.items():
-                cat_label = cat or "Sem categoria"
-                header_lines.append(f"- {cat_label}: {format_currency(val)}")
+                lines.append(f"- {cat or 'Sem categoria'}: {format_currency(val)}")
 
-        header_lines.append("\n**Top fornecedores por gasto:**")
+        lines.append("\n**Top fornecedores por gasto:**")
         if top_vendors.empty:
-            header_lines.append("- Nenhuma despesa por fornecedor detectada.")
+            lines.append("- Nenhuma despesa por fornecedor detectada.")
         else:
             for vendor, val in top_vendors.items():
-                vendor_label = vendor or "Desconhecido"
-                header_lines.append(f"- {vendor_label}: {format_currency(val)}")
+                lines.append(f"- {vendor or 'Desconhecido'}: {format_currency(val)}")
+
+        result_comment = f"Resultado líquido de {format_currency(net)} indica {'geração de caixa' if net > 0 else 'pressão de caixa'}."
+        lines.append("\n### Interpretação")
+        lines.append(f"- {result_comment}")
+        lines.append("- Depósitos grandes podem ser receita, aporte do sócio ou quitação de empréstimo conforme padrão do pagador.")
 
         suggestions = [
-            "Avalie a concentração de receitas em poucos clientes e diversifique quando possível.",
-            "Reforce contratos recorrentes para manter a previsibilidade de entradas.",
-            "Revise tarifas bancárias e assinaturas recorrentes para possíveis reduções.",
-            "Consolide gastos com fornecedores para negociar melhores condições.",
-            "Monitore saídas em dinheiro ou transferências para garantir documentação adequada.",
+            "Alinhe o reconhecimento de receitas com pagadores recorrentes para melhorar previsibilidade.",
+            "Revise fornecedores de maior gasto para renegociar contratos conforme o tipo de negócio.",
+            "Identifique claramente aportes de sócios e quitações de empréstimos para manter balanço limpo.",
         ]
-        result_comment = (
-            f"A empresa apresentou um resultado líquido de {format_currency(net)}, "
-            "refletindo a posição de caixa do período analisado."
-        )
-        suggestions_title = "**Sugestões:**"
+        if business_label in {"Construction", "HVAC", "Landscaping"}:
+            suggestions.append("Separe materiais de subcontratados para proteger a margem bruta.")
+        elif business_label in {"Cleaning", "Professional Services"}:
+            suggestions.append("Separe mão de obra, suprimentos e marketing para acompanhar custo de aquisição de clientes.")
+        else:
+            suggestions.append("Mantenha a distinção entre despesas operacionais e gastos discricionários.")
 
-    lines = header_lines + ["", f"**{result_comment}**", "", suggestions_title]
-    for tip in suggestions:
-        lines.append(f"- {tip}")
+        lines.append("\n### Sugestões")
+        for tip in suggestions:
+            lines.append(f"- {tip}")
 
     return "\n".join(lines)
 
@@ -858,25 +1024,31 @@ if page == "details":
             charts_container = st.container()
             with charts_container:
                 st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                plotly_template = "plotly_dark" if st.session_state.get("theme") == "dark" else "plotly_white"
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown("### " + tr("chart_expenses_by_category"))
                     expense_totals = prepare_category_totals(ai_df, positive=False)
                     if not expense_totals.empty:
-                        expense_chart = (
-                            alt.Chart(expense_totals)
-                            .mark_bar(cornerRadiusEnd=6)
-                            .encode(
-                                x=alt.X("Total:Q", title=tr("summary_exits")),
-                                y=alt.Y("Category:N", sort="-x", title=tr("category_label")),
-                                color=alt.Color(
-                                    "Total:Q", scale=alt.Scale(scheme="reds"), legend=None
-                                ),
-                                tooltip=["Category", "Total"],
-                            )
-                            .properties(height=360)
+                        expense_chart = px.bar(
+                            expense_totals,
+                            x="Total",
+                            y="Category",
+                            orientation="h",
+                            color="Total",
+                            color_continuous_scale="magma",
+                            text="Total",
+                            height=380,
+                            template=plotly_template,
                         )
-                        st.altair_chart(expense_chart, use_container_width=True)
+                        expense_chart.update_layout(
+                            xaxis_title=tr("summary_exits"),
+                            yaxis_title=tr("category_label"),
+                            margin=dict(l=10, r=10, t=30, b=10),
+                            showlegend=False,
+                        )
+                        expense_chart.update_traces(texttemplate="%{text:$,.0f}", textposition="outside")
+                        st.plotly_chart(expense_chart, use_container_width=True)
                     else:
                         st.info(tr("no_expenses"))
 
@@ -884,18 +1056,24 @@ if page == "details":
                     st.markdown("### " + tr("chart_income_by_category"))
                     income_totals = prepare_category_totals(ai_df, positive=True)
                     if not income_totals.empty:
-                        income_chart = (
-                            alt.Chart(income_totals)
-                            .mark_bar(cornerRadiusEnd=6)
-                            .encode(
-                                x=alt.X("Category:N", sort="-y", title=tr("category_label")),
-                                y=alt.Y("Total:Q", title=tr("summary_entries")),
-                                color=alt.Color("Total:Q", scale=alt.Scale(scheme="blues"), legend=None),
-                                tooltip=["Category", "Total"],
-                            )
-                            .properties(height=360)
+                        income_chart = px.bar(
+                            income_totals,
+                            x="Category",
+                            y="Total",
+                            color="Total",
+                            color_continuous_scale="blues",
+                            text="Total",
+                            height=380,
+                            template=plotly_template,
                         )
-                        st.altair_chart(income_chart, use_container_width=True)
+                        income_chart.update_layout(
+                            xaxis_title=tr("category_label"),
+                            yaxis_title=tr("summary_entries"),
+                            margin=dict(l=10, r=10, t=30, b=10),
+                            showlegend=False,
+                        )
+                        income_chart.update_traces(texttemplate="%{text:$,.0f}", textposition="outside")
+                        st.plotly_chart(income_chart, use_container_width=True)
                     else:
                         st.info(tr("no_income"))
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -909,22 +1087,23 @@ if page == "details":
             balance_df = balance_df.sort_values("Date")
             balance_df["Running Balance"] = balance_df["Amount"].cumsum()
             if not balance_df.empty:
-                balance_chart = (
-                    alt.Chart(balance_df)
-                    .mark_line(point=True, interpolate="monotone")
-                    .encode(
-                        x=alt.X("Date:T", title="Date"),
-                        y=alt.Y(
-                            "Running Balance:Q",
-                            title="Running Balance",
-                            scale=alt.Scale(zero=False),
-                        ),
-                        tooltip=["Date:T", "Running Balance:Q"],
-                    )
-                    .interactive()
-                    .properties(height=400)
+                balance_chart = px.line(
+                    balance_df,
+                    x="Date",
+                    y="Running Balance",
+                    markers=True,
+                    line_shape="spline",
+                    height=420,
+                    template=plotly_template,
                 )
-                st.altair_chart(balance_chart, use_container_width=True)
+                balance_chart.update_layout(
+                    xaxis_title="Date",
+                    yaxis_title="Running Balance",
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    hovermode="x unified",
+                    transition_duration=300,
+                )
+                st.plotly_chart(balance_chart, use_container_width=True)
             else:
                 st.info(tr("file_processed_but_empty"))
             st.markdown("</div>", unsafe_allow_html=True)
