@@ -172,6 +172,22 @@ def chunk_batches(items: Iterable, size: int) -> Iterable[list]:
         yield batch
 
 
+def format_ai_error(error: Exception) -> str:
+    error_text = str(error)
+
+    quota_keywords = ["insufficient_quota", "quota", "billing"]
+    status_code = getattr(error, "status_code", None)
+    if status_code == 429 or any(keyword in error_text for keyword in quota_keywords):
+        return (
+            "Limite de uso da API atingido. Verifique o faturamento do OpenAI "
+            "ou utilize uma chave com créditos disponíveis."
+        )
+
+    return (
+        "Falha ao chamar a API do OpenAI. Confira se a chave está correta e tente novamente."
+    )
+
+
 def run_ai_categorization(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
@@ -206,12 +222,15 @@ You are an expert US bookkeeper. Classify bank transactions for accounting syste
             ],
         }
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            response_format={"type": "json_object"},
-            messages=[{"role": "system", "content": system_prompt}, user_prompt],
-            temperature=0.2,
-        )
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                response_format={"type": "json_object"},
+                messages=[{"role": "system", "content": system_prompt}, user_prompt],
+                temperature=0.2,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(format_ai_error(exc)) from exc
 
         try:
             content = response.choices[0].message.content
