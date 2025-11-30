@@ -1,20 +1,18 @@
 import io
 import json
-import os
 import re
 from typing import Iterable
 
 import pandas as pd
 import pdfplumber
 import streamlit as st
-from dotenv import load_dotenv
 from openai import OpenAI
 
 
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if OPENAI_API_KEY is None:
-    st.error("OPENAI_API_KEY was not loaded. Check .env file.")
+try:
+    OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+except KeyError:
+    st.error("OPENAI_API_KEY was not found in Streamlit secrets.")
     st.stop()
 
 st.set_page_config(
