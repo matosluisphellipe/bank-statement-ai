@@ -140,7 +140,12 @@ if "ai_processed" not in st.session_state:
     st.session_state.ai_processed = False
 if "ai_error" not in st.session_state:
     st.session_state.ai_error = None
-
+if "user_context" not in st.session_state:
+    st.session_state.user_context = {}
+if "context_ready" not in st.session_state:
+    st.session_state.context_ready = False
+if "run_ai_now" not in st.session_state:
+    st.session_state.run_ai_now = False
 t = LANG[st.session_state.lang]
 
 
@@ -463,6 +468,55 @@ def calculate_summary(df: pd.DataFrame) -> dict:
     }
 
 
+def detect_check_numbers(df: pd.DataFrame) -> list[str]:
+    if "Description" not in df.columns:
+        return []
+    pattern = re.compile(r"check\s*(\d+)", flags=re.IGNORECASE)
+    checks = []
+    for desc in df["Description"].fillna("").astype(str):
+        match = pattern.search(desc)
+        if match:
+            checks.append(match.group(1))
+    return sorted(set(checks))
+
+
+def extract_vendor_candidates(df: pd.DataFrame, top_n: int = 5) -> list[str]:
+    if "Description" not in df.columns:
+        return []
+    cleaned = (
+        df["Description"]
+        .fillna("")
+        .astype(str)
+        .str.replace(r"[^A-Za-z0-9 ]", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+        .str.upper()
+    )
+    vendor_tokens = cleaned.str.split().apply(lambda parts: " ".join(parts[:2]).strip())
+    counts = vendor_tokens.value_counts()
+    candidates = [vendor for vendor in counts.index if vendor and counts[vendor] > 1]
+    return candidates[:top_n]
+
+
+def detect_generic_transactions(df: pd.DataFrame) -> bool:
+    if "Description" not in df.columns:
+        return False
+    series = df["Description"].fillna("").astype(str)
+    generic_patterns = ["misc", "unknown", "payment", "debit", "transfer"]
+    is_generic = series.str.len().lt(5).any() or series.str.contains("|".join(generic_patterns), case=False).any()
+    return bool(is_generic)
+
+
+def detect_unusual_patterns(df: pd.DataFrame) -> bool:
+    if "Amount" not in df.columns:
+        return False
+    amounts = pd.to_numeric(df["Amount"], errors="coerce").dropna().abs()
+    if amounts.empty:
+        return False
+    threshold = max(amounts.median() * 4, 10000)
+    return bool((amounts > threshold).any())
+
+
 def render_metrics(summary: dict):
     st.markdown("<div class='stat-grid'>", unsafe_allow_html=True)
     for label, value in [
@@ -491,6 +545,182 @@ def chunk_batches(items: Iterable, size: int) -> Iterable[list]:
             batch = []
     if batch:
         yield batch
+
+
+def render_context_form(df: pd.DataFrame) -> tuple[dict, bool]:
+    if "vendor_overrides" not in st.session_state:
+        st.session_state.vendor_overrides = {}
+    if "check_info" not in st.session_state:
+        st.session_state.check_info = {}
+
+    vendor_candidates = extract_vendor_candidates(df)
+    check_numbers = detect_check_numbers(df)
+    has_generic = detect_generic_transactions(df)
+    has_unusual = detect_unusual_patterns(df)
+
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### Sessão 1 — Identificação da Empresa")
+    business_type = st.text_input("Tipo de negócio (obrigatório)", key="business_type_user_input")
+    products_services = st.text_area(
+        "Liste serviços/produtos típicos que sua empresa vende.", key="business_products_services"
+    )
+    business_model = st.radio("Modelo de operação (obrigatório)", ["Serviços", "Produto", "Misto"], key="business_model")
+    pays_contractors = st.radio(
+        "Você paga contratados (1099) regularmente?", ["Sim", "Não"], key="pays_contractors"
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### Sessão 2 — Vendors importantes")
+    vendor_overrides: dict[str, str] = {}
+    vendor_override_types: dict[str, str] = {}
+    if vendor_candidates:
+        st.markdown("Confirme ou ajuste o nome correto desses fornecedores:")
+        for vendor in vendor_candidates:
+            normalized = vendor.upper()
+            default_value = st.session_state.vendor_overrides.get(normalized, vendor.title())
+            user_value = st.text_input(
+                f"Vendor recomendado: {vendor.title()}", value=default_value, key=f"vendor_override_{normalized}"
+            )
+            user_value = user_value.strip() or vendor.title()
+            vendor_overrides[normalized] = user_value
+            type_options = ["Expense Category", "Income Category", "Transfer", "Outro"]
+            stored_type = st.session_state.get(f"vendor_type_{normalized}", "Expense Category")
+            default_type = stored_type if stored_type in type_options else "Expense Category"
+            vendor_type = st.selectbox(
+                "Tipo sugerido", type_options, key=f"vendor_type_{normalized}", index=type_options.index(default_type)
+            )
+            vendor_override_types[normalized] = vendor_type
+        st.session_state.vendor_overrides = vendor_overrides
+        st.session_state.vendor_override_types = vendor_override_types
+    else:
+        st.info("Nenhum fornecedor recorrente detectado ainda.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### Sessão 3 — Tratamento especial para Cheques")
+    check_info: dict[str, dict] = {}
+    auto_create_vendors = None
+    if check_numbers:
+        st.warning("Pagamentos via cheque encontrados. Preencha os detalhes abaixo.")
+        for number in check_numbers:
+            label = f"Check {number}"
+            vendor_input = st.text_input(f"{label} - quem recebeu?", key=f"check_vendor_{number}")
+            payee_type = st.radio(
+                f"Esses pagamentos são para quem? ({label})",
+                ["Contractor (1099)", "Funcionário (Payroll/W2)", "Despesa operacional", "Outro"],
+                key=f"check_type_{number}",
+            )
+            other_detail = st.text_input(
+                f"Outro - detalhe ({label})", key=f"check_other_{number}", value=st.session_state.get(f"check_other_{number}", "")
+            )
+            check_info[label] = {
+                "vendor": vendor_input.strip(),
+                "type": payee_type,
+                "other_detail": other_detail.strip(),
+            }
+        auto_create_vendors = st.radio(
+            "Esses fornecedores devem ser criados automaticamente no Zoho/QuickBooks?",
+            ["Sim", "Não"],
+            key="check_auto_create",
+        )
+    else:
+        st.info("Nenhuma transação de cheque detectada.")
+    st.session_state.check_info = check_info
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### Sessão 4 — Perguntas para melhorar a classificação")
+    custom_categories = st.text_area(
+        "Cite categorias de despesa específicas usadas pela sua empresa.", key="custom_categories"
+    )
+    misclassifications = st.text_area(
+        "Há algum gasto que a IA costuma classificar errado? Liste aqui.", key="common_misclassifications"
+    )
+    prioritize = st.radio(
+        "Você deseja priorizar a classificação por:",
+        ["Contabilidade precisa (mais lenta)", "Classificação rápida (menos precisa)"],
+        key="prioritize_accuracy",
+    )
+    recurring_payments = st.text_area(
+        "Pagamentos recorrentes (assinaturas, serviços mensais): Liste nomes para identificação mais precisa.",
+        key="recurring_payments",
+    )
+    clarifications = ""
+    unusual_explanations = ""
+    if has_generic:
+        clarifications = st.text_area(
+            "Explique transações genéricas ou suspeitas identificadas.",
+            key="generic_clarifications",
+            help="Campo exibido automaticamente quando detectamos descrições genéricas.",
+        )
+    if has_unusual:
+        unusual_explanations = st.text_area(
+            "Descreva padrões incomuns ou valores atípicos encontrados no extrato.",
+            key="unusual_explanations",
+            help="Campo exibido automaticamente quando detectamos padrões incomuns.",
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    user_context = {
+        "business_type": business_type.strip(),
+        "business_model": business_model,
+        "pays_contractors": pays_contractors == "Sim",
+        "products_services": products_services.strip(),
+        "vendor_overrides": st.session_state.get("vendor_overrides", {}),
+        "vendor_override_types": st.session_state.get("vendor_override_types", {}),
+        "check_transactions": st.session_state.get("check_info", {}),
+        "auto_create_vendors": auto_create_vendors == "Sim" if auto_create_vendors is not None else None,
+        "custom_categories": custom_categories.strip(),
+        "common_misclassifications": misclassifications.strip(),
+        "prioritize_accuracy": prioritize.startswith("Contabilidade precisa"),
+        "recurring_payments": recurring_payments.strip(),
+        "generic_clarifications": clarifications.strip(),
+        "unusual_explanations": unusual_explanations.strip(),
+        "has_generic_descriptions": has_generic,
+        "has_unusual_patterns": has_unusual,
+    }
+
+    required_fields = [business_type, business_model]
+    for number in check_numbers:
+        label = f"Check {number}"
+        details = check_info.get(label, {})
+        required_fields.append(details.get("vendor"))
+        required_fields.append(details.get("type"))
+    if check_numbers:
+        required_fields.append(auto_create_vendors)
+    if has_generic:
+        required_fields.append(clarifications)
+    if has_unusual:
+        required_fields.append(unusual_explanations)
+
+    is_complete = all(bool(field) for field in required_fields)
+
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("### Sessão 5 — Resumo das respostas e validação")
+    st.markdown(
+        """
+        - Tipo de negócio: **{business}**
+        - Modelo: **{model}**
+        - Vendedores confirmados: **{vendors}**
+        - Categorias específicas: **{categories}**
+        - Erros comuns informados: **{mistakes}**
+        - Contratados pagos por cheque: **{checks}**
+        """.format(
+            business=business_type or "(preencha)",
+            model=business_model,
+            vendors=", ".join(vendor_overrides.values()) if vendor_overrides else "(nenhum)",
+            categories=custom_categories or "(não informado)",
+            mistakes=misclassifications or "(não informado)",
+            checks=", ".join([
+                f"{label}: {details.get('vendor') or 'pendente'}" for label, details in check_info.items()
+            ])
+            or "(não há cheques)",
+        )
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    return user_context, is_complete
 
 
 def format_ai_error(error: Exception, lang: str) -> str:
@@ -603,7 +833,7 @@ def validate_ai_results(enriched_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def run_ai_categorization(
-    df: pd.DataFrame, progress_placeholder=None, status_placeholder=None
+    df: pd.DataFrame, user_context: dict | None = None, progress_placeholder=None, status_placeholder=None
 ) -> pd.DataFrame:
     if df.empty:
         return df
@@ -615,8 +845,18 @@ def run_ai_categorization(
     working_df["Date"] = working_df["Date"].astype(str)
     payload_rows = working_df.to_dict(orient="records")
 
-    system_prompt = """
+    user_context = user_context or {}
+    context_block = json.dumps(user_context, ensure_ascii=False, indent=2)
+
+    system_prompt = f"""
 You are a senior U.S. accountant and forensic bookkeeper with expertise in classifying financial transactions for businesses across all industries. Your job is to classify each transaction with extremely high accuracy.
+
+Strictly follow the user-supplied bookkeeping context provided below. Respect custom vendor overrides, check transaction details, clarified misclassifications, and prioritization preferences. Never ignore this context.
+
+User supplied context (always obey):
+{context_block}
+
+When vendor_overrides contains a key, normalize the detected vendor to that mapped name and align the category/type accordingly. For check_transactions, enforce the provided vendor and payee type and reflect them in AI_Category and AI_Notes. If prioritize_accuracy is true, favor conservative, well-explained classifications over speed.
 
 You MUST:
 1. Read each transaction holistically: description, vendor name, amount, patterns, frequency.
@@ -683,6 +923,10 @@ You MUST:
                         "Classify the following transactions. Respond as JSON with a top-level key \"transactions\" "
                         "containing a list in the same order. Do not add extra commentary."
                     ),
+                },
+                {
+                    "type": "text",
+                    "text": f"User_supplied_context: {context_block}",
                 },
                 {
                     "type": "text",
@@ -938,6 +1182,11 @@ if page == "main":
                 st.session_state.df = df
                 st.session_state.ai_processed = False
                 st.session_state.ai_error = None
+                st.session_state.context_ready = False
+                st.session_state.run_ai_now = False
+                st.session_state.user_context = {}
+                st.session_state.vendor_overrides = {}
+                st.session_state.check_info = {}
 
                 summary = calculate_summary(df)
                 render_metrics(summary)
@@ -969,38 +1218,60 @@ if page == "details":
             st.session_state.page = "main"
     else:
         if not st.session_state.ai_processed:
-            batch_size = 30
-            count = min(len(df), 2000)
-            total_batches = math.ceil(count / batch_size)
+            user_context, form_complete = render_context_form(df)
+            st.session_state.user_context = user_context
+            st.session_state.context_ready = form_complete
 
-            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-            st.markdown(f"### {tr('ai_progress_title')}")
-            status_placeholder = st.empty()
-            status_placeholder.markdown(f"<div class='progress-text'>{tr('ai_progress_start')}</div>", unsafe_allow_html=True)
-            progress_placeholder = st.empty()
-            progress_placeholder.markdown(
-                "<div class='progress-bar'><span style='width:0%'></span></div>", unsafe_allow_html=True
-            )
-            status_placeholder.markdown(f"<div class='progress-text'>{tr('ai_progress_sending')}</div>", unsafe_allow_html=True)
-
-            try:
-                ai_df = run_ai_categorization(
-                    df, progress_placeholder=progress_placeholder, status_placeholder=status_placeholder
-                )
-                progress_placeholder.markdown(
-                    "<div class='progress-bar'><span style='width:100%'></span></div>",
-                    unsafe_allow_html=True,
-                )
-                status_placeholder.markdown(f"<div class='progress-text'>{tr('ai_done')}</div>", unsafe_allow_html=True)
-                st.session_state.df_ai = ai_df
-                st.session_state.ai_processed = True
+            confirm_disabled = not form_complete
+            if st.button("Confirmar e iniciar análise com IA", type="primary", disabled=confirm_disabled):
+                st.session_state.run_ai_now = True
                 st.session_state.ai_error = None
-            except Exception as exc:  # noqa: BLE001
-                progress_placeholder.empty()
-                status_placeholder.empty()
-                st.session_state.ai_error = str(exc)
-                st.session_state.ai_processed = False
-            st.markdown("</div>", unsafe_allow_html=True)
+                st.experimental_rerun()
+
+            if st.session_state.run_ai_now and form_complete:
+                batch_size = 30
+                count = min(len(df), 2000)
+                total_batches = math.ceil(count / batch_size)
+
+                st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                st.markdown(f"### {tr('ai_progress_title')}")
+                status_placeholder = st.empty()
+                status_placeholder.markdown(
+                    f"<div class='progress-text'>{tr('ai_progress_start')}</div>", unsafe_allow_html=True
+                )
+                progress_placeholder = st.empty()
+                progress_placeholder.markdown(
+                    "<div class='progress-bar'><span style='width:0%'></span></div>", unsafe_allow_html=True
+                )
+                status_placeholder.markdown(
+                    f"<div class='progress-text'>{tr('ai_progress_sending')}</div>", unsafe_allow_html=True
+                )
+
+                try:
+                    ai_df = run_ai_categorization(
+                        df,
+                        user_context=user_context,
+                        progress_placeholder=progress_placeholder,
+                        status_placeholder=status_placeholder,
+                    )
+                    progress_placeholder.markdown(
+                        "<div class='progress-bar'><span style='width:100%'></span></div>",
+                        unsafe_allow_html=True,
+                    )
+                    status_placeholder.markdown(
+                        f"<div class='progress-text'>{tr('ai_done')}</div>", unsafe_allow_html=True
+                    )
+                    st.session_state.df_ai = ai_df
+                    st.session_state.ai_processed = True
+                    st.session_state.ai_error = None
+                    st.session_state.run_ai_now = False
+                except Exception as exc:  # noqa: BLE001
+                    progress_placeholder.empty()
+                    status_placeholder.empty()
+                    st.session_state.ai_error = str(exc)
+                    st.session_state.ai_processed = False
+                    st.session_state.run_ai_now = False
+                st.markdown("</div>", unsafe_allow_html=True)
 
         if st.session_state.ai_error:
             st.error(f"{tr('ai_failed')}: {st.session_state.ai_error}")
