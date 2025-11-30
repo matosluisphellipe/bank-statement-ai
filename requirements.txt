@@ -2,5 +2,4 @@ streamlit
 pandas
 pdfplumber
 openpyxl
-python-dotenv
 openai
