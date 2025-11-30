@@ -131,9 +131,7 @@ LANG = {
 
 
 if "lang" not in st.session_state:
-    st.session_state.lang = "en"
-if "theme" not in st.session_state:
-    st.session_state.theme = "light"
+    st.session_state.lang = "pt"
 if "page" not in st.session_state:
     st.session_state.page = "upload"
 if "ai_processed" not in st.session_state:
@@ -155,266 +153,222 @@ def tr(key: str, **kwargs) -> str:
 
 
 def apply_theme_css():
-    theme = st.session_state.get("theme", "light")
-    palettes = {
-        "light": {
-            "bg": "#f8fafc",
-            "panel": "#ffffff",
-            "text": "#111827",
-            "muted": "#6b7280",
-            "border": "#e5e7eb",
-            "accent": "#0066ff",
-        },
-        "dark": {
-            "bg": "#0d1117",
-            "panel": "#161b22",
-            "text": "#e6edf3",
-            "muted": "#a1acc0",
-            "border": "#1f2937",
-            "accent": "#238dff",
-        },
-    }
-    colors = palettes[theme]
-    gradient = "linear-gradient(120deg, #0e7490 0%, #0a2540 50%, #0f4c75 100%)"
-
-    style = f"""
+    style = """
     <style>
-    :root {{
-        --bg: {colors['bg']};
-        --panel: {colors['panel']};
-        --text: {colors['text']};
-        --muted: {colors['muted']};
-        --border: {colors['border']};
-        --accent: {colors['accent']};
-    }}
-    * {{ font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }}
-    [data-testid="stAppViewContainer"] {{
+    :root {
+        --bg: #F7F9FC;
+        --panel: #FFFFFF;
+        --text: #1F2937;
+        --muted: #6B7280;
+        --border: #E5E7EB;
+        --primary: #1C64F2;
+        --primary-2: #3B82F6;
+        --success: #16A34A;
+        --warning: #F59E0B;
+        --danger: #DC2626;
+    }
+    * { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    [data-testid="stAppViewContainer"] {
         background: var(--bg);
         color: var(--text);
-    }}
-    .block-container {{
+    }
+    .block-container {
         max-width: 1180px;
-        padding-top: 1.25rem;
-    }}
-    .navbar {{
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 18px;
-        padding: 0.75rem 1rem;
-        margin-bottom: 1.2rem;
-        box-shadow: 0 12px 40px rgba(0,0,0,0.08);
-        position: sticky;
-        top: 0.5rem;
-        z-index: 100;
-    }}
-    .hero-card, .section-card {{
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 18px;
-        padding: 1.25rem 1.4rem;
-        box-shadow: 0 14px 40px rgba(0,0,0,0.1);
-        margin-bottom: 1rem;
-    }}
-    .refinement-grid {{
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 0.9rem;
-    }}
-    .refinement-card {{
+        padding-top: 1.5rem;
+    }
+    h1, h2, h3, h4, h5, h6 { color: var(--text); font-weight: 800; }
+    .navbar {
         background: var(--panel);
         border: 1px solid var(--border);
         border-radius: 16px;
-        padding: 1rem 1.15rem 1.05rem;
-        box-shadow: 0 18px 44px rgba(0,0,0,0.08);
-    }}
-    .card-header {{
+        padding: 1rem 1.2rem;
+        margin-bottom: 1.2rem;
+        box-shadow: 0 12px 34px rgba(28, 100, 242, 0.08);
+    }
+    .hero-card, .section-card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.25rem 1.4rem;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
+        margin-bottom: 1rem;
+    }
+    .refinement-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    .refinement-card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.1rem 1.2rem 1.2rem;
+        box-shadow: 0 18px 40px rgba(28, 100, 242, 0.08);
+    }
+    .card-header {
         display: flex;
         align-items: center;
         gap: 0.6rem;
-        margin-bottom: 0.25rem;
-    }}
-    .card-title {{
-        font-weight: 800;
-        font-size: 1.05rem;
-    }}
-    .card-subtitle {{
-        color: var(--muted);
-        font-size: 0.95rem;
         margin-bottom: 0.35rem;
-    }}
-    .pill-badge {{
+    }
+    .card-title {
+        font-weight: 800;
+        font-size: 1.08rem;
+    }
+    .card-subtitle {
+        color: var(--muted);
+        font-size: 0.96rem;
+        margin-bottom: 0.6rem;
+    }
+    .pill-badge {
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
-        background: rgba(0,102,255,0.08);
+        background: #E8F0FE;
         color: var(--text);
         border: 1px solid var(--border);
-        padding: 0.4rem 0.65rem;
+        padding: 0.5rem 0.7rem;
         border-radius: 999px;
         font-weight: 700;
-        font-size: 0.92rem;
-    }}
-    .compact-input input, .compact-input textarea {{
-        padding: 0.55rem 0.65rem !important;
+        font-size: 0.95rem;
+    }
+    .compact-input input, .compact-input textarea, .compact-input select, .compact-input .stTextInput>div>input {
+        padding: 0.75rem 0.8rem !important;
         border-radius: 12px !important;
         border: 1px solid var(--border) !important;
-        background: rgba(0,0,0,0.02) !important;
-    }}
-    .compact-input textarea {{ min-height: 90px; }}
-    .refinement-card .stRadio > label {{ font-weight: 700; color: var(--text); }}
-    .refinement-card .stRadio [data-baseweb="radio"] label {{ font-weight: 600; }}
-    .vendor-grid {{
+        background: #F7F9FC !important;
+        font-size: 0.96rem !important;
+    }
+    .compact-input textarea { min-height: 110px; }
+    .refinement-card .stRadio > label { font-weight: 700; color: var(--text); }
+    .refinement-card .stRadio [data-baseweb="radio"] label { font-weight: 600; }
+    .vendor-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 0.6rem;
-    }}
-    .vendor-card, .mini-card {{
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 0.8rem;
+    }
+    .vendor-card, .mini-card {
         border: 1px solid var(--border);
         border-radius: 14px;
-        padding: 0.75rem 0.85rem;
-        background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0)) var(--panel);
-        box-shadow: 0 12px 34px rgba(0,0,0,0.06);
-    }}
-    .vendor-title {{ font-weight: 800; }}
-    .check-grid {{ display: grid; gap: 0.7rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }}
-    .check-card {{
+        padding: 0.95rem 1rem;
+        background: linear-gradient(180deg, rgba(59, 130, 246, 0.05), rgba(255,255,255,0.92));
+        box-shadow: 0 12px 32px rgba(0,0,0,0.05);
+    }
+    .vendor-title { font-weight: 800; font-size: 1rem; }
+    .check-grid { display: grid; gap: 0.9rem; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+    .check-card {
         border: 1px solid var(--border);
         border-radius: 16px;
-        padding: 0.95rem 1rem;
-        background: linear-gradient(180deg, rgba(0,102,255,0.05), rgba(0,0,0,0)) var(--panel);
-        box-shadow: 0 18px 44px rgba(0,0,0,0.08);
+        padding: 1.1rem 1.2rem;
+        background: linear-gradient(180deg, rgba(28,100,242,0.06), rgba(255,255,255,0.95));
+        box-shadow: 0 18px 40px rgba(0,0,0,0.08);
         margin-bottom: 0;
-    }}
-    .check-card-title {{
+    }
+    .check-card-title {
         font-weight: 800;
         display: flex;
         align-items: center;
-        gap: 0.35rem;
-        margin-bottom: 0.1rem;
-    }}
-    .check-card-value {{
+        gap: 0.45rem;
+        margin-bottom: 0.2rem;
+    }
+    .check-card-value {
         color: var(--muted);
         font-weight: 700;
-        margin-bottom: 0.4rem;
-    }}
-    .summary-inline {{ display: grid; gap: 0.4rem; }}
-    .refinement-actions {{ display: flex; justify-content: flex-end; gap: 0.5rem; }}
-    .stat-grid {{
+        margin-bottom: 0.8rem;
+    }
+    .summary-inline { display: grid; gap: 0.5rem; }
+    .refinement-actions { display: flex; justify-content: space-between; gap: 0.8rem; }
+    .stat-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 0.75rem;
-    }}
-    .stat-card {{
-        background: linear-gradient(180deg, rgba(0,0,0,0.03), rgba(0,0,0,0)) var(--panel);
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 0.8rem;
+    }
+    .stat-card {
+        background: linear-gradient(180deg, rgba(28, 100, 242, 0.05), rgba(255,255,255,1));
         border: 1px solid var(--border);
         border-radius: 14px;
-        padding: 0.9rem 1.1rem;
-        box-shadow: 0 10px 32px rgba(0,0,0,0.07);
-    }}
-    .stat-label {{ color: var(--muted); font-size: 0.95rem; margin-bottom: 0.2rem; }}
-    .stat-value {{ color: var(--text); font-weight: 700; font-size: 1.3rem; }}
-    .pill {{
-        background: rgba(0,0,0,0.04);
+        padding: 1rem 1.1rem;
+        box-shadow: 0 12px 28px rgba(0,0,0,0.06);
+    }
+    .stat-label { color: var(--muted); font-size: 0.95rem; margin-bottom: 0.2rem; font-weight: 600; }
+    .stat-value { color: var(--text); font-weight: 800; font-size: 1.4rem; }
+    .pill {
+        background: #EEF2FF;
         border: 1px solid var(--border);
         color: var(--text);
         border-radius: 12px;
-        padding: 0.5rem 0.75rem;
+        padding: 0.6rem 0.85rem;
         width: 100%;
-    }}
-    .download-row {{ display: flex; gap: 0.6rem; justify-content: center; }}
-    .download-row .stDownloadButton>button, .stDownloadButton>button {{
+        font-weight: 600;
+    }
+    .download-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; justify-items: center; }
+    .download-row .stDownloadButton>button, .stDownloadButton>button {
         width: 100%;
         border-radius: 12px;
-        padding: 0.7rem 1.2rem;
-        font-weight: 700;
+        padding: 0.85rem 1.2rem;
+        font-weight: 750;
         border: 1px solid var(--border);
-        background: {gradient};
+        background: linear-gradient(135deg, var(--primary), var(--primary-2));
         color: #fff;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
-        box-shadow: 0 12px 30px rgba(0,0,0,0.16);
-    }}
-    .download-row .stDownloadButton>button:hover, .stDownloadButton>button:hover {{
+        box-shadow: 0 12px 30px rgba(28,100,242,0.25);
+    }
+    .download-row .stDownloadButton>button:hover, .stDownloadButton>button:hover {
         transform: translateY(-1px);
-        box-shadow: 0 16px 34px rgba(0,0,0,0.2);
-    }}
-    .progress-shell {{
+        box-shadow: 0 16px 34px rgba(28,100,242,0.35);
+    }
+    .progress-shell {
         border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 0.9rem;
+        border-radius: 16px;
+        padding: 1rem 1.2rem 1.05rem;
         background: var(--panel);
-        box-shadow: 0 10px 24px rgba(0,0,0,0.08);
-    }}
-    .progress-bar {{
+        box-shadow: 0 12px 32px rgba(0,0,0,0.06);
+    }
+    .progress-bar {
         position: relative;
-        height: 10px;
-        background: rgba(0,0,0,0.08);
+        height: 12px;
+        background: #E5E7EB;
         border-radius: 999px;
         overflow: hidden;
-    }}
-    .progress-bar span {{
+    }
+    .progress-bar span {
         position: absolute;
         left: 0;
         top: 0;
         bottom: 0;
         width: 0;
         border-radius: 999px;
-        background: linear-gradient(90deg, #0ea5e9 0%, #0066ff 60%, #0f4c75 100%);
-        box-shadow: 0 10px 30px rgba(0,102,255,0.35);
-        transition: width 300ms ease;
-    }}
-    .progress-text {{
+        background: linear-gradient(90deg, #1C64F2 0%, #3B82F6 60%, #60A5FA 100%);
+        box-shadow: 0 10px 24px rgba(28,100,242,0.25);
+        transition: width 280ms ease;
+    }
+    .progress-text {
         margin-top: 0.5rem;
         color: var(--muted);
-        font-weight: 600;
-        letter-spacing: 0.02em;
-    }}
-    .report-grid {{
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 0.8rem;
-        margin-top: 0.5rem;
-    }}
-    .report-card {{
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 0.9rem 1rem;
-        background: linear-gradient(180deg, rgba(35,141,255,0.06), rgba(0,0,0,0)) var(--panel);
-        box-shadow: 0 12px 28px rgba(0,0,0,0.08);
-    }}
-    .check-card {{
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 1rem 1.1rem;
-        background: linear-gradient(180deg, rgba(0,102,255,0.04), rgba(0,0,0,0)) var(--panel);
-        box-shadow: 0 10px 26px rgba(0,0,0,0.07);
-        margin-bottom: 0.8rem;
-    }}
-    .check-card-title {{
         font-weight: 700;
-        display: flex;
-        align-items: center;
-        gap: 0.35rem;
-        margin-bottom: 0.2rem;
-    }}
-    .check-card-value {{
-        color: var(--muted);
-        font-weight: 600;
-        margin-bottom: 0.6rem;
-    }}
-    .divider {{
+        letter-spacing: 0.01em;
+    }
+    .report-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 0.9rem;
+        margin-top: 0.6rem;
+    }
+    .report-card {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 1rem 1.05rem;
+        background: linear-gradient(180deg, rgba(28,100,242,0.05), rgba(255,255,255,0.95));
+        box-shadow: 0 12px 26px rgba(0,0,0,0.05);
+    }
+    .divider {
         border-bottom: 1px solid var(--border);
-        margin: 0.75rem 0 0.5rem;
-    }}
-    .styled-table tbody tr:nth-child(even) {{
-        background: rgba(0,0,0,0.03);
-    }}
-    .styled-table tbody tr:hover {{
-        background: rgba(0,102,255,0.08);
-    }}
-    .styled-table table {{ border-collapse: separate; border-spacing: 0; }}
-    .styled-table td, .styled-table th {{ border: 1px solid var(--border); padding: 8px; }}
-    .styled-table th {{ background: rgba(0,102,255,0.06); color: var(--text); font-weight: 700; }}
-    [data-testid="stToolbar"] {{ visibility: hidden; }}
+        margin: 0.75rem 0 0.65rem;
+    }
+    .styled-table table { border-collapse: separate; border-spacing: 0; }
+    .styled-table td, .styled-table th { border: 1px solid var(--border); padding: 10px; }
+    .styled-table th { background: #EEF2FF; color: var(--text); font-weight: 800; }
+    [data-testid="stToolbar"] { visibility: hidden; }
     </style>
     """
     st.markdown(style, unsafe_allow_html=True)
@@ -1246,6 +1200,73 @@ def generate_report_cards(df: pd.DataFrame):
     st.markdown("</div>", unsafe_allow_html=True)
 
 
+def render_income_insights(ai_df: pd.DataFrame):
+    income_df = ai_df.copy()
+    income_df["Amount"] = pd.to_numeric(income_df.get("Amount"), errors="coerce")
+    income_df["Date"] = pd.to_datetime(income_df.get("Date"), errors="coerce")
+    inflows = income_df.dropna(subset=["Amount"])
+    inflows = inflows[inflows["Amount"] > 0]
+
+    if inflows.empty:
+        st.info("Nenhuma entrada identificada até agora.")
+        return
+
+    top_sources = inflows.groupby("AI_Category")[["Amount"]].sum().sort_values("Amount", ascending=False).head(4)
+    top_sources_html = "<ul>" + "".join(
+        [f"<li>{cat}: {format_currency(val)}</li>" for cat, val in top_sources["Amount"].items()]
+    ) + "</ul>"
+
+    inflows["month"] = inflows["Date"].dt.to_period("M")
+    monthly_avg = inflows.groupby("month")[["Amount"]].sum().mean()[0]
+
+    anomaly_threshold = inflows["Amount"].mean() + inflows["Amount"].std() * 2
+    anomalies = inflows[inflows["Amount"] > anomaly_threshold].sort_values("Amount", ascending=False).head(3)
+    anomaly_html = (
+        "<ul>"
+        + "".join(
+            [
+                f"<li>{row['Date'].date()}: {row['Description']} ({format_currency(row['Amount'])})"  # type: ignore[index]
+                for _, row in anomalies.iterrows()
+            ]
+        )
+        + "</ul>"
+        if not anomalies.empty
+        else "Nenhuma anomalia relevante encontrada."
+    )
+
+    vendor_mix = inflows["AI_Vendor"].fillna("Entrada recorrente").value_counts().head(3)
+    nature_html = "<ul>" + "".join(
+        [f"<li>{vendor}: {count} ocorrências</li>" for vendor, count in vendor_mix.items()]
+    ) + "</ul>"
+
+    notes = (
+        "Priorize conferência das maiores entradas e verifique se pertencem ao tipo de negócio indicado. "
+        "Combine padrões recorrentes com contratos e faturas para manter o AR atualizado."
+    )
+
+    st.markdown("<div class='report-grid'>", unsafe_allow_html=True)
+    for title, content in [
+        ("Maiores fontes de entrada", top_sources_html),
+        ("Natureza das entradas", nature_html),
+        ("Média mensal", format_currency(monthly_avg)),
+        ("Anomalias detectadas", anomaly_html),
+    ]:
+        st.markdown(
+            f"""
+            <div class='report-card'>
+                <div style='font-weight:750;margin-bottom:0.35rem;'>{title}</div>
+                <div style='color:#1F2937;font-size:0.98rem;'>{content}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='mini-card' style='margin-top:0.8rem;background:#EEF2FF;border-color:#D1D5DB;'>📝 Notas: {notes}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def prepare_downloads(df: pd.DataFrame) -> tuple[str, str, str]:
     zoho_df = pd.DataFrame(
         {
@@ -1287,53 +1308,92 @@ def prepare_downloads(df: pd.DataFrame) -> tuple[str, str, str]:
 # Layout components
 # ------------------------------------------------------------
 apply_theme_css()
-
-with st.container():
-    st.markdown("<div class='navbar'>", unsafe_allow_html=True)
-    left, right = st.columns([1.5, 1])
-    with left:
-        st.markdown(
-            f"<div style='font-size:18px;font-weight:800;letter-spacing:0.01em;'>{tr('app_name')}</div>"
-            f"<div style='color:var(--muted);font-size:13px;'>{tr('app_tagline')}</div>",
-            unsafe_allow_html=True,
-        )
-    with right:
-        lang = st.selectbox(tr("language_label"), options=["en", "pt"], index=0 if st.session_state.lang == "en" else 1)
-        if lang != st.session_state.lang:
-            st.session_state.lang = lang
-            st.rerun()
-        theme_choice = st.selectbox(
-            tr("theme_label"),
-            options=[tr("theme_light"), tr("theme_dark")],
-            index=0 if st.session_state.theme == "light" else 1,
-            key="theme_selector",
-        )
-        st.session_state.theme = "light" if theme_choice == tr("theme_light") else "dark"
-    st.markdown("</div>", unsafe_allow_html=True)
-
-apply_theme_css()
-
 page = st.session_state.page
 
+
+def render_brand_header():
+    with st.container():
+        st.markdown("<div class='navbar'>", unsafe_allow_html=True)
+        col1, col2 = st.columns([1.6, 1])
+        with col1:
+            st.markdown(
+                """
+                <div style='font-size:20px;font-weight:800;color:#1F2937;'>Bank Statement AI</div>
+                <div style='color:#6B7280;font-size:14px;'>Plataforma corporativa para classificação e exportação contábil.</div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col2:
+            st.markdown(
+                """
+                <div style='display:flex;justify-content:flex-end;gap:0.4rem;font-weight:700;color:#1F2937;'>
+                    <span>Clareza financeira</span>
+                    <span style='color:#9CA3AF'>•</span>
+                    <span>Estilo SaaS premium</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_stepper(current: str):
+    steps = [
+        ("upload", "Upload do Extrato"),
+        ("refinement", "Refinamento"),
+        ("analysis", "Análise da IA"),
+    ]
+    items = []
+    for step, label in steps:
+        active = step == current
+        done = steps.index((step, label)) < [s for s, _ in steps].index(current)
+        state_color = "#1C64F2" if active or done else "#9CA3AF"
+        items.append(
+            f"""
+            <div style='display:flex;align-items:center;gap:0.5rem;'>
+                <div style='width:32px;height:32px;border-radius:50%;border:2px solid {state_color};color:{state_color};display:flex;align-items:center;justify-content:center;font-weight:800;'>{steps.index((step, label))+1}</div>
+                <div style='font-weight:750;color:{'#1F2937' if active else '#6B7280'}'>{label}</div>
+            </div>
+            """
+        )
+    st.markdown(
+        """
+        <div style='display:flex;justify-content:space-between;gap:1rem;margin-bottom:0.8rem;'>
+            {items}
+        </div>
+        """.format(items="".join(items)),
+        unsafe_allow_html=True,
+    )
+
+
+render_brand_header()
+render_stepper(page)
+
 # ------------------------------------------------------------
-# Page 1: Upload & resumo
+# Página 1 — Upload do Extrato
 # ------------------------------------------------------------
 if page == "upload":
     st.markdown("<div class='hero-card'>", unsafe_allow_html=True)
     st.markdown(
-        f"<div style='font-size:30px;font-weight:800;color:var(--text);'>{tr('hero_primary')}</div>"
-        f"<div style='color:var(--muted);margin-top:6px;font-size:16px;'>{tr('hero_secondary')}</div>",
+        """
+        <div style='font-size:32px;font-weight:800;color:#1F2937;'>Envie o extrato e avance como um SaaS de elite</div>
+        <div style='color:#6B7280;margin-top:8px;font-size:16px;'>Interface limpa, corporativa e pronta para Zoho, QuickBooks e Stripe-level UX.</div>
+        """,
         unsafe_allow_html=True,
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown(f"### {tr('upload_title')}")
+    st.markdown("<div class='card-header'><span>📤</span><div class='card-title'>Upload do Extrato</div></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='card-subtitle'>Importe PDF, CSV, XLSX, TXT, OFX, QFX ou QBO. Arquivos seguros, processamento moderno.</div>",
+        unsafe_allow_html=True,
+    )
 
     uploaded = st.file_uploader(
-        tr("upload_help"),
+        "Arraste o arquivo aqui ou clique para procurar.",
         type=["pdf", "csv", "xlsx", "txt", "ofx", "qfx", "qbo"],
-        help=tr("upload_help"),
+        label_visibility="collapsed",
     )
 
     if uploaded:
@@ -1355,33 +1415,34 @@ if page == "upload":
                 summary = calculate_summary(df)
                 render_metrics(summary)
 
-                st.info(tr("upload_info"))
-
-                if st.button("Ir para formulário de refinamento", type="primary"):
-                    st.session_state.page = "refinement"
+                st.info("Pronto para seguir? Clique em ‘Prosseguir para Refinamento’. A IA roda somente depois.")
         except Exception as exc:  # noqa: BLE001
             st.error(tr("upload_error", error=exc))
     else:
-        st.info(tr("upload_first_info"))
+        st.info("Comece enviando o extrato para ativar o fluxo corporativo completo.")
+
+    proceed_disabled = not uploaded or ("df" not in st.session_state)
+    if st.button("Prosseguir para Refinamento", type="primary", disabled=proceed_disabled):
+        st.session_state.page = "refinement"
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------
-# Page 2: Formulário de refinamento
+# Página 2 — Formulário de Refinamento
 # ------------------------------------------------------------
 if page == "refinement":
     df = st.session_state.get("df")
     st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown("<div class='card-header'><span>🧾</span><div class='card-title'>Formulário de refinamento</div></div>", unsafe_allow_html=True)
+    st.markdown("<div class='card-header'><span>🧭</span><div class='card-title'>Formulário de Refinamento</div></div>", unsafe_allow_html=True)
     st.markdown(
-        "<div class='card-subtitle'>Organize as respostas em cards elegantes antes de iniciar a IA.</div>",
+        "<div class='card-subtitle'>Cards organizados para garantir dados impecáveis antes da IA.</div>",
         unsafe_allow_html=True,
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
     if df is None or df.empty:
         st.info(tr("no_file_info"))
-        if st.button(tr("button_back")):
+        if st.button("Voltar para upload"):
             st.session_state.page = "upload"
     else:
         user_context, form_complete = render_context_form(df)
@@ -1389,29 +1450,30 @@ if page == "refinement":
         st.session_state.context_ready = form_complete
 
         st.markdown("<div class='refinement-actions'>", unsafe_allow_html=True)
-        back_clicked = st.button(tr("button_back"), key="refinement_back")
-        go_ai = st.button("Ir para análise com IA", type="primary", key="refinement_next")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        if back_clicked:
+        if st.button("⬅️ Voltar", key="refinement_back"):
             st.session_state.page = "upload"
-        if go_ai:
+        advance_label = "Prosseguir para Análise" if form_complete else "Complete os campos obrigatórios"
+        if st.button(advance_label, type="primary", key="refinement_next", disabled=not form_complete):
             st.session_state.page = "analysis"
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------
-# Page 3: Análise com IA
+# Página 3 — Análise da IA
 # ------------------------------------------------------------
 if page == "analysis":
     df = st.session_state.get("df")
     st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.markdown(f"## {tr('details_title')}")
-    st.markdown(f"<div style='color:var(--muted);'>{tr('details_subtitle')}</div>", unsafe_allow_html=True)
+    st.markdown("<div class='card-header'><span>🤖</span><div class='card-title'>Análise da IA</div></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='card-subtitle'>Barra de progresso responsiva, métricas corporativas e gráficos Plotly de última geração.</div>",
+        unsafe_allow_html=True,
+    )
     st.markdown("</div>", unsafe_allow_html=True)
 
     if df is None or df.empty:
         st.info(tr("no_file_info"))
-        if st.button(tr("button_back")):
+        if st.button("Voltar para upload"):
             st.session_state.page = "upload"
     else:
         if not st.session_state.context_ready:
@@ -1419,81 +1481,100 @@ if page == "analysis":
             if st.button("Voltar para o formulário"):
                 st.session_state.page = "refinement"
         else:
-            if not st.session_state.ai_processed:
+            start_clicked = st.button("Iniciar análise com IA", type="primary")
+            if start_clicked:
+                st.session_state.run_ai_now = True
+                st.session_state.ai_error = None
+                st.session_state.ai_processed = False
 
-                def _start_ai_analysis():
-                    st.session_state.run_ai_now = True
-                    st.session_state.ai_error = None
+            if st.session_state.get("run_ai_now") and not st.session_state.ai_processed:
+                st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                st.markdown("<div class='card-header'><span>🚀</span><div class='card-title'>Analisando transações com IA…</div></div>", unsafe_allow_html=True)
+                status_placeholder = st.empty()
+                progress_placeholder = st.empty()
+                progress_placeholder.markdown(
+                    "<div class='progress-bar'><span style='width:0%'></span></div>", unsafe_allow_html=True
+                )
+                status_placeholder.markdown(
+                    f"<div class='progress-text'>{tr('ai_progress_start')}</div>", unsafe_allow_html=True
+                )
 
-                st.button("Iniciar análise com IA", type="primary", on_click=_start_ai_analysis)
-
-                if st.session_state.run_ai_now:
-                    batch_size = 30
-                    count = min(len(df), 2000)
-
-                    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-                    st.markdown(f"### {tr('ai_progress_title')}")
-                    status_placeholder = st.empty()
-                    status_placeholder.markdown(
-                        f"<div class='progress-text'>{tr('ai_progress_start')}</div>", unsafe_allow_html=True
+                try:
+                    ai_df = run_ai_categorization(
+                        df,
+                        user_context=st.session_state.get("user_context", {}),
+                        progress_placeholder=progress_placeholder,
+                        status_placeholder=status_placeholder,
                     )
-                    progress_placeholder = st.empty()
                     progress_placeholder.markdown(
-                        "<div class='progress-bar'><span style='width:0%'></span></div>", unsafe_allow_html=True
+                        "<div class='progress-bar'><span style='width:100%'></span></div>",
+                        unsafe_allow_html=True,
                     )
                     status_placeholder.markdown(
-                        f"<div class='progress-text'>{tr('ai_progress_sending')}</div>", unsafe_allow_html=True
+                        f"<div class='progress-text'>{tr('ai_done')}</div>", unsafe_allow_html=True
                     )
-
-                    try:
-                        ai_df = run_ai_categorization(
-                            df,
-                            user_context=st.session_state.get("user_context", {}),
-                            progress_placeholder=progress_placeholder,
-                            status_placeholder=status_placeholder,
-                        )
-                        progress_placeholder.markdown(
-                            "<div class='progress-bar'><span style='width:100%'></span></div>",
-                            unsafe_allow_html=True,
-                        )
-                        status_placeholder.markdown(
-                            f"<div class='progress-text'>{tr('ai_done')}</div>", unsafe_allow_html=True
-                        )
-                        st.session_state.df_ai = ai_df
-                        st.session_state.ai_processed = True
-                        st.session_state.ai_error = None
-                        st.session_state.run_ai_now = False
-                    except Exception as exc:  # noqa: BLE001
-                        progress_placeholder.empty()
-                        status_placeholder.empty()
-                        st.session_state.ai_error = str(exc)
-                        st.session_state.ai_processed = False
-                        st.session_state.run_ai_now = False
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.session_state.df_ai = ai_df
+                    st.session_state.ai_processed = True
+                    st.session_state.ai_error = None
+                except Exception as exc:  # noqa: BLE001
+                    progress_placeholder.empty()
+                    status_placeholder.empty()
+                    st.session_state.ai_error = str(exc)
+                    st.session_state.ai_processed = False
+                finally:
+                    st.session_state.run_ai_now = False
+                st.markdown("</div>", unsafe_allow_html=True)
 
             if st.session_state.ai_error:
                 st.error(f"{tr('ai_failed')}: {st.session_state.ai_error}")
-
-                def _retry_ai():
+                if st.button(tr("ai_retry")):
                     st.session_state.ai_processed = False
                     st.session_state.ai_error = None
                     st.session_state.run_ai_now = True
-
-                st.button(tr("ai_retry"), on_click=_retry_ai)
             elif st.session_state.ai_processed:
                 ai_df = st.session_state.df_ai
-                st.success(tr("ai_done"))
 
                 st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-                st.markdown(f"## {tr('ai_overview')}")
+                st.markdown("<div class='card-header'><span>📊</span><div class='card-title'>Métricas Executivas</div></div>", unsafe_allow_html=True)
+                totals = calculate_summary(ai_df)
+                business_type = ai_df.get("AI_Business_Type", pd.Series(["—"]))[0]
+                st.markdown("<div class='stat-grid'>", unsafe_allow_html=True)
+                metric_data = [
+                    ("Entrada total", totals["entries"], "💰"),
+                    ("Saída total", totals["exits"], "💸"),
+                    ("Resultado líquido", totals["entries"] + totals["exits"], "🧾"),
+                    ("Tipo de negócio identificado", business_type, "🏢"),
+                ]
+                for label, value, icon in metric_data:
+                    display_val = format_currency(value) if isinstance(value, (int, float)) else value
+                    st.markdown(
+                        f"""
+                        <div class='stat-card'>
+                            <div class='stat-label'>{icon} {label}</div>
+                            <div class='stat-value'>{display_val}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                st.markdown("<div class='card-header'><span>📑</span><div class='card-title'>Relatório Financeiro</div></div>", unsafe_allow_html=True)
                 generate_report_cards(ai_df)
                 st.markdown("</div>", unsafe_allow_html=True)
 
                 st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-                plotly_template = "plotly_dark" if st.session_state.get("theme") == "dark" else "plotly_white"
+                st.markdown("<div class='card-header'><span>💡</span><div class='card-title'>Entradas detalhadas</div></div>", unsafe_allow_html=True)
+                render_income_insights(ai_df)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                st.markdown("<div class='card-header'><span>📊</span><div class='card-title'>Visualizações Plotly</div></div>", unsafe_allow_html=True)
+                plotly_template = "plotly_white"
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.markdown(f"#### {tr('chart_expenses')}")
+                    st.markdown("<div style='font-weight:750;'>Despesas por categoria</div>", unsafe_allow_html=True)
                     expense_totals = prepare_category_totals(ai_df, positive=False)
                     if not expense_totals.empty:
                         fig_expense = px.bar(
@@ -1501,58 +1582,38 @@ if page == "analysis":
                             x="Total",
                             y="Category",
                             orientation="h",
-                            text="Total",
                             color="Total",
                             color_continuous_scale="Blues",
                             template=plotly_template,
                             height=420,
                         )
-                        fig_expense.update_traces(
-                            marker_line_color="#0f4c75", marker_line_width=1.4, texttemplate="%{text:$,.0f}"
-                        )
-                        fig_expense.update_layout(
-                            plot_bgcolor="rgba(0,0,0,0)",
-                            paper_bgcolor="rgba(0,0,0,0)",
-                            xaxis_title=tr("summary_exits"),
-                            yaxis_title=tr("category_label"),
-                            margin=dict(l=0, r=0, t=40, b=0),
-                            font=dict(size=14),
-                        )
+                        fig_expense.update_traces(marker_line_color="#1C64F2", marker_line_width=1.2)
+                        fig_expense.update_layout(plot_bgcolor="#FFFFFF", paper_bgcolor="#FFFFFF", margin=dict(l=0, r=0, t=30, b=0))
                         st.plotly_chart(fig_expense, use_container_width=True)
                     else:
                         st.info(tr("no_expenses"))
                 with col2:
-                    st.markdown(f"#### {tr('chart_income')}")
+                    st.markdown("<div style='font-weight:750;'>Entradas por categoria</div>", unsafe_allow_html=True)
                     income_totals = prepare_category_totals(ai_df, positive=True)
                     if not income_totals.empty:
                         fig_income = px.bar(
                             income_totals,
                             x="Category",
                             y="Total",
-                            text="Total",
                             color="Total",
-                            color_continuous_scale="Teal",
+                            color_continuous_scale="Blues",
                             template=plotly_template,
                             height=420,
                         )
-                        fig_income.update_traces(
-                            marker_line_color="#0066ff", marker_line_width=1.4, texttemplate="%{text:$,.0f}"
-                        )
-                        fig_income.update_layout(
-                            plot_bgcolor="rgba(0,0,0,0)",
-                            paper_bgcolor="rgba(0,0,0,0)",
-                            xaxis_title=tr("category_label"),
-                            yaxis_title=tr("summary_entries"),
-                            margin=dict(l=0, r=0, t=40, b=0),
-                            font=dict(size=14),
-                        )
+                        fig_income.update_traces(marker_line_color="#1C64F2", marker_line_width=1.2)
+                        fig_income.update_layout(plot_bgcolor="#FFFFFF", paper_bgcolor="#FFFFFF", margin=dict(l=0, r=0, t=30, b=0))
                         st.plotly_chart(fig_income, use_container_width=True)
                     else:
                         st.info(tr("no_income"))
                 st.markdown("</div>", unsafe_allow_html=True)
 
                 st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-                st.markdown(f"#### {tr('chart_balance')}")
+                st.markdown("<div class='card-header'><span>📈</span><div class='card-title'>Evolução do saldo</div></div>", unsafe_allow_html=True)
                 balance_df = ai_df.copy()
                 balance_df["Amount"] = pd.to_numeric(balance_df["Amount"], errors="coerce")
                 balance_df["Date"] = pd.to_datetime(balance_df["Date"], errors="coerce")
@@ -1564,17 +1625,17 @@ if page == "analysis":
                         balance_df,
                         x="Date",
                         y="Running Balance",
-                        markers=True,
+                        markers=False,
                         line_shape="spline",
                         template=plotly_template,
                         height=420,
                     )
+                    balance_chart.update_traces(line=dict(color="#1C64F2", width=3))
                     balance_chart.update_layout(
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="#FFFFFF",
+                        paper_bgcolor="#FFFFFF",
                         margin=dict(l=0, r=0, t=30, b=0),
                         hovermode="x unified",
-                        font=dict(size=14),
                     )
                     st.plotly_chart(balance_chart, use_container_width=True)
                 else:
@@ -1582,7 +1643,7 @@ if page == "analysis":
                 st.markdown("</div>", unsafe_allow_html=True)
 
                 st.markdown("<div class='section-card styled-table'>", unsafe_allow_html=True)
-                st.markdown(f"#### {tr('table_full')}")
+                st.markdown("<div class='card-header'><span>📄</span><div class='card-title'>Tabela completa</div></div>", unsafe_allow_html=True)
                 st.dataframe(
                     ai_df[
                         [
@@ -1603,38 +1664,22 @@ if page == "analysis":
                 st.markdown("</div>", unsafe_allow_html=True)
 
                 st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-                st.markdown(f"### {tr('export_section')}")
+                st.markdown("<div class='card-header'><span>💾</span><div class='card-title'>Downloads</div></div>", unsafe_allow_html=True)
                 zoho_csv, qb_csv, vendors_csv = prepare_downloads(ai_df)
-                colz, colq, colv = st.columns(3)
-                with colz:
-                    st.download_button(
-                        tr("download_zoho"),
-                        data=zoho_csv,
-                        file_name="zoho_books_transactions.csv",
-                        mime="text/csv",
-                    )
-                with colq:
-                    st.download_button(
-                        tr("download_qb"),
-                        data=qb_csv,
-                        file_name="quickbooks_transactions.csv",
-                        mime="text/csv",
-                    )
-                with colv:
-                    st.download_button(
-                        tr("download_vendors"),
-                        data=vendors_csv,
-                        file_name="vendors.csv",
-                        mime="text/csv",
-                    )
+                st.markdown("<div class='download-row'>", unsafe_allow_html=True)
+                st.download_button("💾 Download Zoho", data=zoho_csv, file_name="zoho_books_transactions.csv", mime="text/csv")
+                st.download_button("💾 Download QuickBooks", data=qb_csv, file_name="quickbooks_transactions.csv", mime="text/csv")
+                st.download_button("💾 Download Vendors", data=vendors_csv, file_name="vendors.csv", mime="text/csv")
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
                 if len(df) > 2000:
                     st.warning(tr("ai_only_first_2000"))
 
         col_nav1, col_nav2 = st.columns([1, 1])
         with col_nav1:
-            if st.button(tr("button_back")):
+            if st.button("⬅️ Voltar para Refinamento"):
                 st.session_state.page = "refinement"
         with col_nav2:
-            if st.button("Voltar para upload"):
+            if st.button("⬅️ Voltar para Upload"):
                 st.session_state.page = "upload"
