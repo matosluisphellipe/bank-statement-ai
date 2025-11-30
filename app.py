@@ -67,6 +67,9 @@ TRANSLATIONS = {
         "no_expenses": "Sem despesas para exibir.",
         "no_income": "Sem entradas para exibir.",
         "api_key_missing": "OPENAI_API_KEY não encontrado nas secrets do Streamlit.",
+        "language_label": "Idioma",
+        "category_label": "Categoria",
+        "uncategorized": "Sem categoria",
     },
     "en": {
         "app_title_main": "AI Bookkeeping Assistant",
@@ -111,6 +114,9 @@ TRANSLATIONS = {
         "no_expenses": "No expenses to display.",
         "no_income": "No income to display.",
         "api_key_missing": "OPENAI_API_KEY not found in Streamlit secrets.",
+        "language_label": "Language",
+        "category_label": "Category",
+        "uncategorized": "Uncategorized",
     },
 }
 
@@ -240,54 +246,129 @@ def format_currency(value: float) -> str:
 
 
 def apply_theme_css(theme: str):
-    if theme == "dark":
-        style = """
-        <style>
-        body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-            background-color: #111;
-            color: #f5f5f5;
-        }
-        [data-testid="stSidebar"], .stApp header {
-            background-color: #121212;
-            color: #f5f5f5;
-        }
-        .block-container {
-            padding-top: 0.5rem;
-        }
-        .stMetric, .stDataFrame, .stAltairChart, .stMarkdown, .stButton, .stDownloadButton {
-            background-color: #1f1f1f !important;
-            color: #f5f5f5 !important;
-            border-radius: 8px;
-            border: 1px solid #2a2a2a;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-        </style>
-        """
-    else:
-        style = """
-        <style>
-        body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-            background-color: #ffffff;
-            color: #1c1c1c;
-        }
-        [data-testid="stSidebar"], .stApp header {
-            background-color: #f8f9fa;
-            color: #1c1c1c;
-        }
-        .block-container {
-            padding-top: 0.5rem;
-        }
-        .stMetric, .stDataFrame, .stAltairChart, .stMarkdown, .stButton, .stDownloadButton {
-            background-color: #ffffff !important;
-            color: #1c1c1c !important;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        }
-        </style>
-        """
+    palettes = {
+        "light": {
+            "bg": "#f7f8fa",
+            "panel": "#ffffff",
+            "border": "#e5e7eb",
+            "text": "#0f172a",
+            "muted": "#64748b",
+            "accent": "linear-gradient(120deg, #1d4ed8 0%, #0ea5e9 100%)",
+        },
+        "dark": {
+            "bg": "#0b1220",
+            "panel": "#0f172a",
+            "border": "#1f2937",
+            "text": "#e2e8f0",
+            "muted": "#94a3b8",
+            "accent": "linear-gradient(120deg, #2563eb 0%, #22d3ee 100%)",
+        },
+    }
+
+    colors = palettes.get(theme, palettes["light"])
+    style = f"""
+    <style>
+    * {{ font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }}
+    body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
+        background: {colors['bg']};
+        color: {colors['text']};
+    }}
+    .block-container {{
+        padding-top: 1rem;
+        max-width: 1200px;
+    }}
+    [data-testid="stSidebar"], .stApp header {{
+        background: {colors['panel']};
+        color: {colors['text']};
+    }}
+    .top-banner {{
+        background: {colors['panel']};
+        border: 1px solid {colors['border']};
+        border-radius: 16px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.25rem;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+        position: sticky;
+        top: 0.5rem;
+        z-index: 999;
+    }}
+    .section-card {{
+        background: {colors['panel']};
+        border: 1px solid {colors['border']};
+        border-radius: 14px;
+        padding: 1.25rem;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+        margin-bottom: 1rem;
+    }}
+    .stat-card {{
+        background: {colors['panel']};
+        border: 1px solid {colors['border']};
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.05);
+    }}
+    .stat-label {{
+        color: {colors['muted']};
+        font-size: 0.9rem;
+        margin-bottom: 0.2rem;
+    }}
+    .stat-value {{
+        font-weight: 700;
+        font-size: 1.25rem;
+        color: {colors['text']};
+    }}
+    .pill-label {{
+        color: {colors['muted']};
+        font-size: 0.85rem;
+        margin-bottom: 0.35rem;
+        display: block;
+    }}
+    .pill-control {{
+        background: {colors['bg']};
+        border: 1px solid {colors['border']};
+        border-radius: 12px;
+        padding: 0.4rem 0.75rem;
+        width: 100%;
+    }}
+    .upload-helper {{
+        color: {colors['muted']};
+        font-size: 0.95rem;
+    }}
+    .stButton>button, .stDownloadButton>button {{
+        border-radius: 10px;
+        padding: 0.6rem 1.2rem;
+        border: 1px solid {colors['border']};
+        background: {colors['accent']};
+        color: #fff;
+        font-weight: 600;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+    }}
+    [data-testid="stMetricValue"] {{ color: {colors['text']}; }}
+    [data-testid="stMetricLabel"] {{ color: {colors['muted']}; }}
+    [data-testid="stToolbar"] {{ visibility: hidden; }}
+    </style>
+    """
 
     st.markdown(style, unsafe_allow_html=True)
+
+
+def prepare_category_totals(df: pd.DataFrame, positive: bool) -> pd.DataFrame:
+    cleaned = df.copy()
+    cleaned["Amount"] = pd.to_numeric(cleaned["Amount"], errors="coerce")
+    cleaned = cleaned.replace([math.inf, -math.inf], pd.NA).dropna(subset=["Amount"])
+    cleaned["AI_Category"] = cleaned["AI_Category"].fillna(tr("uncategorized"))
+
+    mask = cleaned["Amount"] > 0 if positive else cleaned["Amount"] < 0
+    totals = (
+        cleaned.loc[mask]
+        .assign(Amount=lambda x: x["Amount"].abs())
+        .groupby("AI_Category", dropna=False)["Amount"]
+        .sum()
+        .reset_index()
+        .rename(columns={"AI_Category": "Category", "Amount": "Total"})
+        .sort_values("Total", ascending=False)
+    )
+    return totals
 
 
 def calculate_summary(df: pd.DataFrame) -> dict:
@@ -302,9 +383,36 @@ def calculate_summary(df: pd.DataFrame) -> dict:
 
 def render_metrics(summary: dict):
     col1, col2, col3 = st.columns(3)
-    col1.metric(tr("summary_entries"), format_currency(summary["entries"]))
-    col2.metric(tr("summary_exits"), format_currency(summary["exits"]))
-    col3.metric(tr("summary_count"), f"{summary['count']:,}")
+    with col1:
+        st.markdown(
+            f"""
+            <div class='stat-card'>
+                <div class='stat-label'>{tr('summary_entries')}</div>
+                <div class='stat-value'>{format_currency(summary['entries'])}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col2:
+        st.markdown(
+            f"""
+            <div class='stat-card'>
+                <div class='stat-label'>{tr('summary_exits')}</div>
+                <div class='stat-value'>{format_currency(summary['exits'])}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col3:
+        st.markdown(
+            f"""
+            <div class='stat-card'>
+                <div class='stat-label'>{tr('summary_count')}</div>
+                <div class='stat-value'>{summary['count']:,}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def render_header(title: str, subtitle: str | None = None):
@@ -605,34 +713,35 @@ if "ai_error" not in st.session_state:
 current_lang = st.session_state.get("lang", "pt")
 current_theme = st.session_state.get("theme", "light")
 
-top_bar = st.container()
-with top_bar:
-    col_app, col_lang, col_theme = st.columns([1, 2, 2])
-    col_app.markdown(
-        f"<div style='font-size:14px;font-weight:600;opacity:0.8;'>{tr('app_abbr')}</div>",
-        unsafe_allow_html=True,
-    )
+with st.container():
+    st.markdown("<div class='top-banner'>", unsafe_allow_html=True)
+    col_app, col_lang, col_theme = st.columns([1.5, 1, 1])
+    with col_app:
+        st.markdown(
+            f"<div style='font-size:14px;font-weight:700;color:#4b5563;'>{tr('app_abbr')}</div>",
+            unsafe_allow_html=True,
+        )
+    with col_lang:
+        lang_selection = st.selectbox(
+            tr("language_label"),
+            options=["pt", "en"],
+            format_func=lambda x: "Português" if x == "pt" else "English",
+            index=0 if current_lang == "pt" else 1,
+            key="lang_selector",
+        )
+        if lang_selection != current_lang:
+            st.session_state.lang = lang_selection
+            st.rerun()
 
-    lang_selection = col_lang.radio(
-        "",
-        options=["pt", "en"],
-        format_func=lambda x: "Português" if x == "pt" else "English",
-        index=0 if current_lang == "pt" else 1,
-        horizontal=True,
-        key="lang_selector",
-    )
-    if lang_selection != current_lang:
-        st.session_state.lang = lang_selection
-        st.rerun()
-
-    theme_choice = col_theme.radio(
-        tr("theme_label"),
-        [tr("theme_light"), tr("theme_dark")],
-        horizontal=True,
-        index=0 if current_theme == "light" else 1,
-        key="theme_selector",
-    )
-    st.session_state.theme = "light" if theme_choice == tr("theme_light") else "dark"
+    with col_theme:
+        theme_choice = st.selectbox(
+            tr("theme_label"),
+            [tr("theme_light"), tr("theme_dark")],
+            index=0 if current_theme == "light" else 1,
+            key="theme_selector",
+        )
+        st.session_state.theme = "light" if theme_choice == tr("theme_light") else "dark"
+    st.markdown("</div>", unsafe_allow_html=True)
 
 apply_theme_css(st.session_state.theme)
 
@@ -643,48 +752,57 @@ page = st.session_state.page
 # Page: Summary (upload + metrics)
 # ------------------------------------------------------------
 if page == "main":
-    render_header(tr("app_title_main"), tr("app_subtitle_main"))
+    with st.container():
+        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+        render_header(tr("app_title_main"), tr("app_subtitle_main"))
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.subheader(tr("upload_section_title"))
-    uploaded = st.file_uploader(
-        tr("upload_help"),
-        type=["pdf", "csv", "xlsx", "txt", "ofx", "qfx", "qbo"],
-        help=tr("upload_help"),
-    )
+    with st.container():
+        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+        st.subheader(tr("upload_section_title"))
+        st.markdown(f"<p class='upload-helper'>{tr('upload_help')}</p>", unsafe_allow_html=True)
+        uploaded = st.file_uploader(
+            tr("upload_help"),
+            type=["pdf", "csv", "xlsx", "txt", "ofx", "qfx", "qbo"],
+            help=tr("upload_help"),
+        )
 
-    if uploaded:
-        try:
-            df = normalize_transactions(parse_file(uploaded))
-            if df.empty:
-                st.warning(tr("file_processed_but_empty"))
-            else:
-                df = df.dropna(axis=1, how="all")
-                st.session_state.df = df
-                st.session_state.ai_processed = False
-                st.session_state.ai_error = None
+        if uploaded:
+            try:
+                df = normalize_transactions(parse_file(uploaded))
+                if df.empty:
+                    st.warning(tr("file_processed_but_empty"))
+                else:
+                    df = df.dropna(axis=1, how="all")
+                    st.session_state.df = df
+                    st.session_state.ai_processed = False
+                    st.session_state.ai_error = None
 
-                summary = calculate_summary(df)
-                with st.container():
-                    render_metrics(summary)
+                    summary = calculate_summary(df)
+                    with st.container():
+                        render_metrics(summary)
 
-                st.info(tr("upload_info"))
+                    st.info(tr("upload_info"))
 
-                st.write("")
-                if st.button(tr("button_view_details"), type="primary"):
-                    st.session_state.page = "details"
+                    st.write("")
+                    if st.button(tr("button_view_details"), type="primary"):
+                        st.session_state.page = "details"
 
-        except Exception as exc:  # noqa: BLE001
-            st.error(tr("upload_error", error=exc))
-    else:
-        st.info(tr("upload_first_info"))
+            except Exception as exc:  # noqa: BLE001
+                st.error(tr("upload_error", error=exc))
+        else:
+            st.info(tr("upload_first_info"))
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------
 # Page: Details (AI analysis + exports)
 # ------------------------------------------------------------
 if page == "details":
-    render_header(tr("details_title"), tr("details_subtitle"))
+    with st.container():
+        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+        render_header(tr("details_title"), tr("details_subtitle"))
+        st.markdown("</div>", unsafe_allow_html=True)
 
     df = st.session_state.get("df")
     if df is None or df.empty:
@@ -698,6 +816,7 @@ if page == "details":
             total_batches = math.ceil(count / batch_size)
             estimated_seconds = total_batches * 2
 
+            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
             st.markdown("### " + tr("ai_progress_title"))
             st.markdown(tr("ai_progress_estimate", seconds=estimated_seconds, count=count))
             progress_bar = st.progress(0)
@@ -719,6 +838,7 @@ if page == "details":
                     status_placeholder.empty()
                 st.session_state.ai_error = str(exc)
                 st.session_state.ai_processed = False
+            st.markdown("</div>", unsafe_allow_html=True)
 
         if st.session_state.ai_error:
             st.error(f"{tr('ai_failed')}: {st.session_state.ai_error}")
@@ -730,33 +850,31 @@ if page == "details":
             ai_df = st.session_state.df_ai
             st.success(tr("ai_done"))
 
-            st.divider()
+            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
             st.markdown("## " + tr("ai_overview_title"))
             st.markdown(generate_summary_text(ai_df, lang=st.session_state.get("lang", "pt")))
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            st.divider()
             charts_container = st.container()
             with charts_container:
+                st.markdown("<div class='section-card'>", unsafe_allow_html=True)
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown("### " + tr("chart_expenses_by_category"))
-                    expense_data = (
-                        ai_df[ai_df["Amount"] < 0]
-                        .groupby("AI_Category")["Amount"]
-                        .sum()
-                        .abs()
-                        .sort_values(ascending=False)
-                    )
-                    if not expense_data.empty:
+                    expense_totals = prepare_category_totals(ai_df, positive=False)
+                    if not expense_totals.empty:
                         expense_chart = (
-                            alt.Chart(expense_data.reset_index())
-                            .mark_bar()
+                            alt.Chart(expense_totals)
+                            .mark_bar(cornerRadiusEnd=6)
                             .encode(
-                                x=alt.X("Amount:Q", title=tr("summary_exits")),
-                                y=alt.Y("AI_Category:N", sort="-x", title="AI_Category"),
-                                color=alt.Color("Amount:Q", scheme="redblue", legend=None),
+                                x=alt.X("Total:Q", title=tr("summary_exits")),
+                                y=alt.Y("Category:N", sort="-x", title=tr("category_label")),
+                                color=alt.Color(
+                                    "Total:Q", scale=alt.Scale(scheme="reds"), legend=None
+                                ),
+                                tooltip=["Category", "Total"],
                             )
-                            .properties(height=400)
+                            .properties(height=360)
                         )
                         st.altair_chart(expense_chart, use_container_width=True)
                     else:
@@ -764,49 +882,54 @@ if page == "details":
 
                 with col2:
                     st.markdown("### " + tr("chart_income_by_category"))
-                    income_data = (
-                        ai_df[ai_df["Amount"] > 0]
-                        .groupby("AI_Category")["Amount"]
-                        .sum()
-                        .sort_values(ascending=False)
-                    )
-                    if not income_data.empty:
+                    income_totals = prepare_category_totals(ai_df, positive=True)
+                    if not income_totals.empty:
                         income_chart = (
-                            alt.Chart(income_data.reset_index())
-                            .mark_bar()
+                            alt.Chart(income_totals)
+                            .mark_bar(cornerRadiusEnd=6)
                             .encode(
-                                x=alt.X("AI_Category:N", sort="-y", title="AI_Category"),
-                                y=alt.Y("Amount:Q", title=tr("summary_entries")),
-                                color=alt.Color("Amount:Q", scheme="blues", legend=None),
+                                x=alt.X("Category:N", sort="-y", title=tr("category_label")),
+                                y=alt.Y("Total:Q", title=tr("summary_entries")),
+                                color=alt.Color("Total:Q", scale=alt.Scale(scheme="blues"), legend=None),
+                                tooltip=["Category", "Total"],
                             )
-                            .properties(height=400)
+                            .properties(height=360)
                         )
                         st.altair_chart(income_chart, use_container_width=True)
                     else:
                         st.info(tr("no_income"))
+                st.markdown("</div>", unsafe_allow_html=True)
 
+            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
             st.markdown("### " + tr("chart_balance_evolution"))
             balance_df = ai_df.copy()
+            balance_df["Amount"] = pd.to_numeric(balance_df["Amount"], errors="coerce")
             balance_df["Date"] = pd.to_datetime(balance_df["Date"], errors="coerce")
+            balance_df = balance_df.replace([math.inf, -math.inf], pd.NA).dropna(subset=["Date", "Amount"])
             balance_df = balance_df.sort_values("Date")
             balance_df["Running Balance"] = balance_df["Amount"].cumsum()
-            balance_chart = (
-                alt.Chart(balance_df)
-                .mark_line(point=True, interpolate="monotone")
-                .encode(
-                    x=alt.X("Date:T", title="Date"),
-                    y=alt.Y(
-                        "Running Balance:Q",
-                        title="Running Balance",
-                        scale=alt.Scale(zero=False),
-                    ),
+            if not balance_df.empty:
+                balance_chart = (
+                    alt.Chart(balance_df)
+                    .mark_line(point=True, interpolate="monotone")
+                    .encode(
+                        x=alt.X("Date:T", title="Date"),
+                        y=alt.Y(
+                            "Running Balance:Q",
+                            title="Running Balance",
+                            scale=alt.Scale(zero=False),
+                        ),
+                        tooltip=["Date:T", "Running Balance:Q"],
+                    )
+                    .interactive()
+                    .properties(height=400)
                 )
-                .interactive()
-                .properties(height=400)
-            )
-            st.altair_chart(balance_chart, use_container_width=True)
+                st.altair_chart(balance_chart, use_container_width=True)
+            else:
+                st.info(tr("file_processed_but_empty"))
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown("---")
+            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
             st.markdown("### " + tr("table_full_ai"))
             st.dataframe(
                 ai_df[
@@ -824,9 +947,11 @@ if page == "details":
                 ],
                 use_container_width=True,
             )
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown("---")
-            st.markdown("## " + tr("export_section_title"))
+            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+            st.markdown("### " + tr("export_section_title"))
+            st.markdown("Prepare arquivos para Zoho Books, QuickBooks e vendors list.")
             zoho_csv, qb_csv, vendors_csv = prepare_downloads(ai_df)
 
             colz, colq, colv = st.columns(3)
